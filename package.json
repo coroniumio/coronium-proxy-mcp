@@ -1,0 +1,63 @@
+{
+  "name": "coronium-proxy-mcp",
+  "version": "0.3.0",
+  "description": "Model Context Protocol server for Coronium.io mobile proxy service - manage proxies, check balances, and handle authentication",
+  "private": false,
+  "type": "module",
+  "main": "dist/server.js",
+  "bin": {
+    "coronium-mcp": "dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "node dist/server.js",
+    "dev": "tsx src/server.ts",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "coronium",
+    "proxy",
+    "mobile-proxy",
+    "4g-proxy",
+    "5g-proxy",
+    "authentication",
+    "api",
+    "claude",
+    "ai-assistant"
+  ],
+  "author": "Coronium.io",
+  "license": "MIT",
+  "homepage": "https://github.com/coronium/coronium-proxy-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coronium/coronium-proxy-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/coronium/coronium-proxy-mcp/issues"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.2.0",
+    "axios": "^1.7.7",
+    "zod": "^3.23.8",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.4",
+    "@types/node": "^20.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE",
+    "STARTER_PROMPT.md"
+  ]
+}
