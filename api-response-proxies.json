@@ -1,0 +1,46 @@
+{
+  "data": [
+    {
+      "_id": "67e7fa6332501826402869ac",
+      "http_port": "8017",
+      "isOnline": true,
+      "name": "cor_UA_5f6e24c946e34469127e586aac6cee46",
+      "proxy_login": "admin",
+      "proxy_password": "6wW4R1Y5B8xK",
+      "socks_port": "5017",
+      "white_list": [],
+      "carrier_id": "661cc45c315231989c85a2be",
+      "region_id": "661cc443315231989c845555",
+      "rotation_interval": 0,
+      "tariff_id": "661cc5e1315231989c9a73ac",
+      "rotated_at": 1756723138300,
+      "ext_ip": "5.248.176.4",
+      "country_id": "661588c6855e2f7287acb30c",
+      "ip_address": "176.97.62.93",
+      "restartByToken": "https://mreset.xyz/restart-modem/a380e8ed11a59d687a1749b25b4672e9",
+      "statusByToken": "https://mreset.xyz/get-modem-status/a380e8ed11a59d687a1749b25b4672e9",
+      "restartToken": "a380e8ed11a59d687a1749b25b4672e9"
+    },
+    {
+      "_id": "68edc95c32501826402be91f",
+      "http_port": "8014",
+      "isOnline": true,
+      "name": "cor_US_41f8d8ff52eecd18ce695f3649156cef",
+      "proxy_login": "admin",
+      "proxy_password": "Zfh89DGd4Hxb",
+      "socks_port": "5014",
+      "white_list": [],
+      "carrier_id": "673c2ac3724c63eb0711be88",
+      "region_id": "66d5e470628182817f4ad9da",
+      "rotated_at": 1762659603272,
+      "ext_ip": "172.56.171.66",
+      "rotation_interval": 0,
+      "tariff_id": "673c2b02724c63eb07166587",
+      "country_id": "60b292a86f46de4a880f89d3",
+      "ip_address": "tmcal1.ddns.net",
+      "restartByToken": "https://mreset.xyz/restart-modem/d20947325205b571bd0fcb57b1656323",
+      "statusByToken": "https://mreset.xyz/get-modem-status/d20947325205b571bd0fcb57b1656323",
+      "restartToken": "d20947325205b571bd0fcb57b1656323"
+    }
+  ]
+}

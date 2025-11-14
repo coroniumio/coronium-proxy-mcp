@@ -4,9 +4,9 @@
         "command": "node",
         "args": ["/Users/caviar/Desktop/coronium-proxy-mcp-v2/dist/server.js"],
         "env": {
-          "CORONIUM_LOGIN": "email@gmail.com",
-          "CORONIUM_PASSWORD": "your_password_here",
-          "LOG_LEVEL": "info"
+          "CORONIUM_LOGIN": "aggathmusic@gmail.com",
+          "CORONIUM_PASSWORD": "MCPwillRuleth3w0rld@@",
+          "LOG_LEVEL": "debug"
         }
       }
     }
