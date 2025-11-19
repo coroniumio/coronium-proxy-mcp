@@ -14,9 +14,9 @@
 import "dotenv/config";
 import axios, { AxiosInstance, AxiosError } from "axios";
 import { z } from "zod";
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import crypto from "crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -100,14 +100,14 @@ class TokenStore {
   private cryptoAddresses?: Array<{coin: string, address: string, balance?: number}>;
 
   constructor() {
-    const configDir = join(homedir(), ".coronium");
-    this.tokenPath = join(configDir, "token.enc");
-    this.cryptoAddressesPath = join(configDir, "crypto_addresses.json");
+    const configDir = path.join(os.homedir(), ".coronium");
+    this.tokenPath = path.join(configDir, "token.enc");
+    this.cryptoAddressesPath = path.join(configDir, "crypto_addresses.json");
     this.encryptionKey = config.tokenEncryptionKey;
     
     // Create config directory if needed
-    if (!existsSync(configDir)) {
-      mkdirSync(configDir, { recursive: true });
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
       logger.debug("Created config directory:", configDir);
     }
     
@@ -179,11 +179,11 @@ class TokenStore {
   saveCryptoAddresses(addresses: Array<{coin: string, address: string, balance?: number}>): void {
     try {
       this.cryptoAddresses = addresses;
-      const configDir = join(homedir(), ".coronium");
-      if (!existsSync(configDir)) {
-        mkdirSync(configDir, { recursive: true });
+      const configDir = path.join(os.homedir(), ".coronium");
+      if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
       }
-      writeFileSync(this.cryptoAddressesPath, JSON.stringify(addresses, null, 2));
+      fs.writeFileSync(this.cryptoAddressesPath, JSON.stringify(addresses, null, 2));
       logger.info(`Saved ${addresses.length} crypto addresses to disk`);
     } catch (error) {
       logger.error("Failed to save crypto addresses:", error);
@@ -195,8 +195,8 @@ class TokenStore {
    */
   loadCryptoAddresses(): void {
     try {
-      if (existsSync(this.cryptoAddressesPath)) {
-        const data = readFileSync(this.cryptoAddressesPath, "utf8");
+      if (fs.existsSync(this.cryptoAddressesPath)) {
+        const data = fs.readFileSync(this.cryptoAddressesPath, "utf8");
         this.cryptoAddresses = JSON.parse(data);
         logger.debug(`Loaded ${this.cryptoAddresses?.length || 0} crypto addresses from disk`);
       }
@@ -222,9 +222,9 @@ class TokenStore {
   clear(): void {
     logger.warn("Clearing stored token");
     this.token = undefined;
-    if (existsSync(this.tokenPath)) {
+    if (fs.existsSync(this.tokenPath)) {
       try {
-        writeFileSync(this.tokenPath, "");
+        fs.writeFileSync(this.tokenPath, "");
         logger.debug("Token file cleared");
       } catch (error) {
         logger.error("Failed to clear token file:", error);
@@ -241,7 +241,7 @@ class TokenStore {
         logger.debug("Saving token to disk...");
         const encrypted = this.encrypt(this.token);
         logger.debug("Encrypted token length:", encrypted.length);
-        writeFileSync(this.tokenPath, encrypted, "utf8");
+        fs.writeFileSync(this.tokenPath, encrypted, "utf8");
         logger.debug("Token saved to:", this.tokenPath);
       } catch (error) {
         logger.error("Failed to save token:", error);
@@ -255,9 +255,9 @@ class TokenStore {
    * Loads token from disk and decrypts it
    */
   private load(): void {
-    if (existsSync(this.tokenPath)) {
+    if (fs.existsSync(this.tokenPath)) {
       try {
-        const encrypted = readFileSync(this.tokenPath, "utf8");
+        const encrypted = fs.readFileSync(this.tokenPath, "utf8");
         if (encrypted) {
           const decrypted = this.decrypt(encrypted);
           if (decrypted) {
@@ -488,6 +488,437 @@ class CoroniumAPI {
 }
 
 // ===========================================
+// Rotation Manager
+// ===========================================
+
+/**
+ * Manages proxy IP rotation operations
+ */
+class RotationManager {
+  private client: AxiosInstance;
+  private logger: Logger;
+  private maxRetries: number = 3;
+  private retryDelay: number = 5000;
+
+  constructor(logger: Logger) {
+    this.logger = logger;
+    this.client = axios.create({
+      timeout: 30000,
+      headers: {
+        'User-Agent': 'Coronium-MCP-Server/1.0'
+      }
+    });
+  }
+
+  /**
+   * Rotates a proxy's IP address with improved verification
+   */
+  async rotateProxy(proxy: any, apiClient?: CoroniumAPI, authToken?: string): Promise<RotationResult> {
+    const startTime = Date.now();
+    const oldIp = proxy.ext_ip || 'unknown';
+
+    try {
+      // Check for rotation token
+      if (!proxy.restartByToken && !proxy.restartToken) {
+        throw new Error('No rotation token available for this proxy');
+      }
+
+      this.logger.info(`Rotating proxy ${proxy.name} (Current IP: ${oldIp})...`);
+
+      // Use the full URL if available, otherwise construct it
+      const rotationUrl = proxy.restartByToken ||
+        `https://mreset.xyz/restart-modem/${proxy.restartToken}`;
+
+      // Initiate rotation
+      const response = await this.client.get(rotationUrl);
+      this.logger.debug(`Rotation initiated for ${proxy.name}`);
+
+      // Initial wait for modem to restart
+      this.logger.debug(`Waiting for modem to restart...`);
+      await this.wait(10000); // Initial 10 second wait
+
+      // Check new status with retries
+      let newIp = 'pending';
+      let verificationAttempts = 0;
+      const maxVerificationAttempts = 5;
+
+      if (proxy.statusByToken || proxy.restartToken) {
+        const statusUrl = proxy.statusByToken ||
+          `https://mreset.xyz/get-modem-status/${proxy.restartToken}`;
+
+        this.logger.debug(`Starting IP verification with up to ${maxVerificationAttempts} attempts...`);
+
+        while (verificationAttempts < maxVerificationAttempts && newIp === 'pending') {
+          verificationAttempts++;
+          this.logger.debug(`Verification attempt ${verificationAttempts}/${maxVerificationAttempts}...`);
+
+          try {
+            const status = await this.checkStatus(statusUrl);
+
+            if (status.currentIp && status.currentIp !== 'unknown') {
+              // Check if IP has actually changed
+              if (status.currentIp !== oldIp) {
+                newIp = status.currentIp;
+                this.logger.info(`✅ New IP confirmed: ${newIp} (was ${oldIp})`);
+                break;
+              } else {
+                this.logger.debug(`IP not changed yet, still ${status.currentIp}`);
+                // Continue waiting if we haven't exhausted attempts
+                if (verificationAttempts < maxVerificationAttempts) {
+                  await this.wait(4000); // Wait 4 more seconds before next check
+                }
+              }
+            } else {
+              this.logger.debug(`Status check returned unknown IP`);
+              if (verificationAttempts < maxVerificationAttempts) {
+                await this.wait(3000); // Wait 3 seconds before retry
+              }
+            }
+          } catch (statusError: any) {
+            this.logger.warn(`Status check attempt ${verificationAttempts} failed: ${statusError.message}`);
+            if (verificationAttempts < maxVerificationAttempts) {
+              await this.wait(3000);
+            }
+          }
+        }
+      }
+
+      // If direct status check didn't work or returned same IP, try fallback via Coronium API
+      if ((newIp === 'pending' || newIp === oldIp) && apiClient && authToken) {
+        this.logger.info(`Attempting fallback IP verification via Coronium API...`);
+        try {
+          // Wait a bit more for the change to propagate
+          await this.wait(5000);
+
+          const updatedProxies = await apiClient.getProxies(authToken);
+          const updatedProxy = updatedProxies.find((p: any) => p._id === proxy._id);
+
+          if (updatedProxy && updatedProxy.ext_ip) {
+            if (updatedProxy.ext_ip !== oldIp) {
+              newIp = updatedProxy.ext_ip;
+              this.logger.info(`✅ New IP verified via API: ${newIp}`);
+            } else {
+              this.logger.warn(`API still shows old IP: ${updatedProxy.ext_ip}`);
+              // One more wait and check
+              await this.wait(5000);
+              const finalCheck = await apiClient.getProxies(authToken);
+              const finalProxy = finalCheck.find((p: any) => p._id === proxy._id);
+              if (finalProxy && finalProxy.ext_ip !== oldIp) {
+                newIp = finalProxy.ext_ip;
+                this.logger.info(`✅ Final check - New IP confirmed: ${newIp}`);
+              }
+            }
+          }
+        } catch (apiError: any) {
+          this.logger.warn(`API fallback verification failed: ${apiError.message}`);
+        }
+      }
+
+      // Determine if rotation was successful
+      const rotationSuccess = newIp !== 'pending' && newIp !== 'unknown' && newIp !== oldIp;
+
+      return {
+        success: rotationSuccess,
+        proxyId: proxy._id,
+        proxyName: proxy.name,
+        oldIp: oldIp,
+        newIp: newIp === 'pending' ? 'verification timeout' : newIp,
+        rotationTime: Date.now() - startTime,
+        timestamp: Date.now()
+      };
+    } catch (error: any) {
+      this.logger.error(`Rotation failed for ${proxy.name}:`, error);
+      return {
+        success: false,
+        proxyId: proxy._id,
+        proxyName: proxy.name,
+        oldIp: oldIp,
+        rotationTime: Date.now() - startTime,
+        timestamp: Date.now(),
+        error: error.message || 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Checks the status of a proxy
+   */
+  async checkStatus(statusUrl: string): Promise<ProxyStatus> {
+    try {
+      const response = await this.client.get(statusUrl);
+
+      // Handle nested data structure (mreset.xyz returns data in data.data)
+      const data = response.data.data || response.data;
+
+      // Extract IP from various possible field names
+      let currentIp = 'unknown';
+      if (data.ext_ip) {
+        currentIp = data.ext_ip;
+      } else if (data.external_ip) {
+        currentIp = data.external_ip;
+      } else if (data.current_ip) {
+        currentIp = data.current_ip;
+      } else if (data.ip) {
+        currentIp = data.ip;
+      }
+
+      return {
+        online: data.status === 'active' || response.data.online !== false,
+        currentIp: currentIp,
+        uptime: data.uptime,
+        lastRotation: data.rotated_at || data.last_rotation
+      };
+    } catch (error: any) {
+      this.logger.warn('Status check failed:', error.message);
+      return {
+        online: false,
+        currentIp: 'unknown'
+      };
+    }
+  }
+
+  /**
+   * Helper function to wait
+   */
+  private async wait(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Retry with exponential backoff
+   */
+  async retryWithBackoff<T>(
+    fn: () => Promise<T>,
+    retries: number = this.maxRetries
+  ): Promise<T> {
+    let lastError: Error;
+
+    for (let i = 0; i < retries; i++) {
+      try {
+        return await fn();
+      } catch (error: any) {
+        lastError = error;
+        if (i < retries - 1) {
+          const delay = this.retryDelay * Math.pow(2, i);
+          this.logger.debug(`Retry ${i + 1}/${retries} after ${delay}ms`);
+          await this.wait(delay);
+        }
+      }
+    }
+
+    throw lastError!;
+  }
+}
+
+// ===========================================
+// Rotation History Manager
+// ===========================================
+
+/**
+ * Manages rotation history tracking
+ */
+class RotationHistory {
+  private historyDir: string;
+  private historyFile: string;
+  private logger: Logger;
+  private maxEntries: number = 100;
+
+  constructor(logger: Logger) {
+    this.logger = logger;
+    this.historyDir = path.join(os.homedir(), '.coronium');
+    this.historyFile = path.join(this.historyDir, 'rotation_history.json');
+    this.ensureHistoryFile();
+  }
+
+  /**
+   * Ensures history file exists
+   */
+  private ensureHistoryFile(): void {
+    try {
+      // Ensure directory exists
+      if (!fs.existsSync(this.historyDir)) {
+        fs.mkdirSync(this.historyDir, { recursive: true });
+      }
+
+      // Create file if it doesn't exist
+      if (!fs.existsSync(this.historyFile)) {
+        fs.writeFileSync(this.historyFile, '[]', 'utf8');
+      }
+    } catch (error) {
+      this.logger.warn('Could not create history file:', error);
+    }
+  }
+
+  /**
+   * Adds a rotation entry to history
+   */
+  async addRotation(entry: RotationEntry): Promise<void> {
+    try {
+      const history = this.getHistory();
+      history.push(entry);
+
+      // Keep only last N entries
+      const pruned = history.slice(-this.maxEntries);
+
+      fs.writeFileSync(this.historyFile, JSON.stringify(pruned, null, 2));
+      this.logger.debug(`Added rotation history for ${entry.proxyName}`);
+    } catch (error) {
+      this.logger.warn('Failed to save rotation history:', error);
+    }
+  }
+
+  /**
+   * Gets rotation history
+   */
+  getHistory(proxyId?: string): RotationEntry[] {
+    try {
+      const data = fs.readFileSync(this.historyFile, 'utf8');
+      const history = JSON.parse(data);
+
+      if (proxyId) {
+        return history.filter((e: RotationEntry) => e.proxyId === proxyId);
+      }
+
+      return history;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Gets the last rotation for a specific proxy
+   */
+  getLastRotation(proxyId: string): RotationEntry | null {
+    const proxyHistory = this.getHistory(proxyId);
+    return proxyHistory.length > 0 ? proxyHistory[proxyHistory.length - 1] : null;
+  }
+}
+
+// ===========================================
+// Type Definitions for Rotation
+// ===========================================
+
+interface RotationResult {
+  success: boolean;
+  proxyId: string;
+  proxyName: string;
+  oldIp: string;
+  newIp?: string;
+  rotationTime: number;
+  timestamp: number;
+  error?: string;
+  statusUrl?: string;
+}
+
+interface ProxyStatus {
+  online: boolean;
+  currentIp: string;
+  uptime?: number;
+  lastRotation?: string;
+  carrier?: string;
+  signal?: number;
+}
+
+interface RotationEntry {
+  id: string;
+  proxyId: string;
+  proxyName: string;
+  oldIp: string;
+  newIp: string;
+  timestamp: number;
+  duration: number;
+  success: boolean;
+  error?: string;
+}
+
+// ===========================================
+// Helper Functions
+// ===========================================
+
+/**
+ * Finds proxies by identifier (name, ID, dongle ID, or country)
+ * Prioritizes exact matches over partial matches
+ */
+function findProxyByIdentifier(proxies: any[], identifier: string): any[] {
+  if (!identifier) return [];
+
+  const lowerIdentifier = identifier.toLowerCase();
+
+  // 1. First, check by exact proxy name match (case-insensitive)
+  const exactNameMatch = proxies.filter(p =>
+    p.name?.toLowerCase() === lowerIdentifier
+  );
+  if (exactNameMatch.length > 0) return exactNameMatch;
+
+  // 2. Check by exact proxy ID (_id field)
+  const idMatch = proxies.filter(p => p._id === identifier);
+  if (idMatch.length > 0) return idMatch;
+
+  // 3. Check by dongle ID (the part after country, e.g., "5f6e24c946e34469127e586aac6cee46")
+  const dongleMatch = proxies.filter(p => {
+    const nameParts = p.name?.split('_') || [];
+    const dongleId = nameParts[2]; // cor_COUNTRY_DONGLEID
+    return dongleId && (dongleId.toLowerCase() === lowerIdentifier ||
+           dongleId.toLowerCase().startsWith(lowerIdentifier));
+  });
+  if (dongleMatch.length === 1) return dongleMatch; // Return only if unique match
+
+  // 4. Check if it's a country code (e.g., US, UA)
+  const countryProxies = proxies.filter(p => {
+    const nameParts = p.name?.split('_') || [];
+    // Important: Don't convert to lowercase here to preserve exact country code matching
+    // Country codes should match case-insensitively but exactly (US != UA)
+    return nameParts[1]?.toLowerCase() === lowerIdentifier; // Check second part for exact country match
+  });
+
+  // If only one proxy for this country, return it
+  if (countryProxies.length === 1) return countryProxies;
+
+  // If multiple proxies for this country, return empty to force user to be more specific
+  if (countryProxies.length > 1) {
+    // We'll handle this in the calling code to provide better error message
+    return countryProxies;
+  }
+
+  // 5. Partial match on full name (last resort)
+  const partialMatch = proxies.filter(p =>
+    p.name?.toLowerCase().includes(lowerIdentifier)
+  );
+
+  // Only return partial matches if there's a single unique match
+  if (partialMatch.length === 1) return partialMatch;
+
+  // Return all partial matches to let calling code handle disambiguation
+  return partialMatch;
+}
+
+/**
+ * Rotates multiple proxies with concurrency control
+ */
+async function rotateMultipleProxies(
+  proxies: any[],
+  rotationManager: RotationManager,
+  logger: Logger,
+  apiClient?: CoroniumAPI,
+  authToken?: string
+): Promise<RotationResult[]> {
+  const concurrencyLimit = 3;
+  const results: RotationResult[] = [];
+
+  logger.info(`Rotating ${proxies.length} proxies with concurrency limit of ${concurrencyLimit}`);
+
+  for (let i = 0; i < proxies.length; i += concurrencyLimit) {
+    const batch = proxies.slice(i, i + concurrencyLimit);
+    const batchResults = await Promise.all(
+      batch.map(proxy => rotationManager.rotateProxy(proxy, apiClient, authToken))
+    );
+    results.push(...batchResults);
+  }
+
+  return results;
+}
+
+// ===========================================
 // Input Validation Schemas
 // ===========================================
 
@@ -513,6 +944,13 @@ const GetCryptoBalanceArgsSchema = z.object({
 
 const GetCreditCardsArgsSchema = z.object({
   token: z.string().min(1).optional()
+});
+
+const RotateModemArgsSchema = z.object({
+  proxy_identifier: z.string().optional().describe("Name, ID, or country code of proxy to rotate"),
+  all: z.boolean().optional().describe("Rotate all proxies"),
+  wait_for_completion: z.boolean().optional().default(true).describe("Wait for rotation to complete"),
+  max_wait_time: z.number().optional().default(30000).describe("Maximum time to wait in milliseconds")
 });
 
 // ===========================================
@@ -985,6 +1423,220 @@ async function main() {
           content: [{
             type: "text",
             text: `❌ Failed to fetch credit cards: ${error instanceof Error ? error.message : "Unknown error"}`
+          }]
+        };
+      }
+    }
+  );
+
+  /**
+   * Tool: coronium_rotate_modem
+   * Rotates the IP address of mobile proxies
+   */
+  server.tool(
+    "coronium_rotate_modem",
+    "🔄 Rotates the IP address of your mobile proxy. Can rotate by name, country (e.g., 'US'), or rotate all proxies. Requires authentication. Examples: 'rotate US', 'rotate all', 'rotate cor_US_xxx'",
+    async (args: any) => {
+      const parsed = RotateModemArgsSchema.safeParse(args);
+      if (!parsed.success) {
+        return {
+          content: [{
+            type: "text",
+            text: `❌ Invalid input: ${parsed.error.errors.map(e => e.message).join(", ")}`
+          }]
+        };
+      }
+
+      // Check authentication
+      const token = tokenStore.get();
+      if (!token) {
+        return {
+          content: [{
+            type: "text",
+            text: "❌ No authentication token found. Please run coronium_get_token first to authenticate."
+          }]
+        };
+      }
+
+      try {
+        // Get current proxies
+        logger.info("Fetching proxies for rotation...");
+        const proxies = await api.getProxies(token);
+
+        if (!proxies || proxies.length === 0) {
+          return {
+            content: [{
+              type: "text",
+              text: "❌ No proxies found in your account."
+            }]
+          };
+        }
+
+        // Initialize managers
+        const rotationManager = new RotationManager(logger);
+        const history = new RotationHistory(logger);
+
+        // Determine which proxies to rotate
+        let targetProxies: any[] = [];
+
+        if (parsed.data.all) {
+          logger.info("Rotating all proxies");
+          targetProxies = proxies;
+        } else if (parsed.data.proxy_identifier) {
+          logger.info(`Finding proxy by identifier: ${parsed.data.proxy_identifier}`);
+          targetProxies = findProxyByIdentifier(proxies, parsed.data.proxy_identifier);
+
+          // Handle ambiguous matches
+          if (targetProxies.length > 1) {
+            // Check if they're all from the same country
+            const countries = [...new Set(targetProxies.map(p => p.name?.split('_')[1]))];
+
+            if (countries.length === 1) {
+              // Multiple proxies from same country - ask to be more specific
+              const proxyList = targetProxies.map((p: any) => {
+                const parts = p.name?.split('_') || [];
+                const dongleId = parts[2]?.substring(0, 8); // First 8 chars of dongle ID
+                return `• ${p.name}\n  Dongle ID: ${dongleId}\n  Current IP: ${p.ext_ip || 'unknown'}`;
+              }).join('\n\n');
+
+              return {
+                content: [{
+                  type: "text",
+                  text: `⚠️ Multiple ${countries[0]} proxies found. Please be more specific:\n\n${proxyList}\n\n**To rotate a specific proxy, use:**\n• Full name: "${targetProxies[0].name}"\n• Dongle ID (first 8+ chars): "${targetProxies[0].name.split('_')[2]?.substring(0, 8)}"\n• Or rotate all with: "all"`
+                }]
+              };
+            }
+          } else if (targetProxies.length === 0) {
+            // No matches found
+            const availableProxies = proxies.map((p: any) => {
+              const parts = p.name?.split('_') || [];
+              const country = parts[1] || 'Unknown';
+              const dongleId = parts[2]?.substring(0, 8);
+              return `• ${p.name} (${country}, dongle: ${dongleId})`;
+            }).join('\n');
+
+            return {
+              content: [{
+                type: "text",
+                text: `❌ No proxy found matching "${parsed.data.proxy_identifier}"\n\n**Available proxies:**\n${availableProxies}\n\n**Try using:**\n• Country code: 'US' or 'UA'\n• Dongle ID: '5f6e24c9' (first 8+ chars)\n• Full name: 'cor_UA_5f6e24c946e34469127e586aac6cee46'\n• All proxies: 'all'`
+              }]
+            };
+          }
+        } else {
+          // Default: rotate first proxy
+          logger.info("No identifier provided, rotating first proxy");
+          targetProxies = [proxies[0]];
+        }
+
+        // Show what we're rotating
+        let statusMessage = "";
+        if (targetProxies.length === 1) {
+          statusMessage = `🔄 **Rotating proxy: ${targetProxies[0].name}**\n\n`;
+          statusMessage += `Current IP: ${targetProxies[0].ext_ip || 'unknown'}\n`;
+          statusMessage += `Please wait while the modem restarts...\n`;
+        } else {
+          statusMessage = `🔄 **Rotating ${targetProxies.length} proxies**\n\n`;
+          targetProxies.forEach((p: any) => {
+            statusMessage += `• ${p.name} (${p.ext_ip || 'unknown'})\n`;
+          });
+          statusMessage += `\nThis may take up to ${targetProxies.length * 10} seconds...\n`;
+        }
+
+        logger.info(`Rotating ${targetProxies.length} proxy/proxies`);
+
+        // Perform rotation with API fallback
+        let results: RotationResult[];
+
+        if (targetProxies.length === 1) {
+          const result = await rotationManager.rotateProxy(targetProxies[0], api, token);
+          results = [result];
+        } else {
+          results = await rotateMultipleProxies(targetProxies, rotationManager, logger, api, token);
+        }
+
+        // Save to history
+        for (const result of results) {
+          if (result.success) {
+            await history.addRotation({
+              id: crypto.randomBytes(16).toString('hex'),
+              proxyId: result.proxyId,
+              proxyName: result.proxyName,
+              oldIp: result.oldIp,
+              newIp: result.newIp || 'unknown',
+              timestamp: result.timestamp,
+              duration: result.rotationTime,
+              success: result.success
+            });
+          }
+        }
+
+        // Format response
+        const successCount = results.filter(r => r.success).length;
+        const failCount = results.filter(r => !r.success).length;
+
+        let responseText = "";
+
+        if (results.length === 1) {
+          const result = results[0];
+          if (result.success) {
+            responseText = `✅ **Successfully rotated ${result.proxyName}**\n\n`;
+            responseText += `├─ Old IP: ${result.oldIp}\n`;
+            responseText += `├─ New IP: ${result.newIp}\n`;
+            responseText += `└─ Rotation time: ${(result.rotationTime / 1000).toFixed(1)}s\n\n`;
+
+            // Try to get updated proxy info
+            if (parsed.data.wait_for_completion && result.newIp !== 'verification failed') {
+              try {
+                const updatedProxies = await api.getProxies(token);
+                const updatedProxy = updatedProxies.find((p: any) => p._id === result.proxyId);
+                if (updatedProxy && updatedProxy.ext_ip !== result.oldIp) {
+                  responseText += `🌐 **Verified new external IP: ${updatedProxy.ext_ip}**\n`;
+                }
+              } catch {
+                // Ignore verification errors
+              }
+            }
+
+            responseText += `\n💡 **Tip:** Your proxy is now using the new IP address. All connections through this proxy will use the new IP.`;
+          } else {
+            responseText = `❌ **Failed to rotate ${result.proxyName}**\n\n`;
+            responseText += `└─ Error: ${result.error}\n\n`;
+            responseText += `Please try again in a few moments or check the proxy status.`;
+          }
+        } else {
+          responseText = `🔄 **Rotation Results**\n\n`;
+          responseText += `Rotated ${results.length} proxies:\n`;
+          responseText += `├─ ✅ Successful: ${successCount}\n`;
+          responseText += `└─ ❌ Failed: ${failCount}\n\n`;
+
+          responseText += `**Details:**\n`;
+          for (const result of results) {
+            if (result.success) {
+              responseText += `✅ ${result.proxyName}:\n`;
+              responseText += `   ${result.oldIp} → ${result.newIp} (${(result.rotationTime / 1000).toFixed(1)}s)\n`;
+            } else {
+              responseText += `❌ ${result.proxyName}: ${result.error}\n`;
+            }
+          }
+
+          if (successCount > 0) {
+            responseText += `\n✨ Successfully rotated ${successCount} proxy IP${successCount > 1 ? 's' : ''}.`;
+          }
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: responseText
+          }]
+        };
+
+      } catch (error: any) {
+        logger.error("Rotation error:", error);
+        return {
+          content: [{
+            type: "text",
+            text: `❌ Rotation failed: ${error.message || 'Unknown error'}\n\nPlease check your connection and try again.`
           }]
         };
       }

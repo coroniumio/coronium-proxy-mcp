@@ -1,6 +1,6 @@
 {
   "name": "coronium-proxy-mcp",
-  "version": "0.3.0",
+  "version": "1.1.0",
   "description": "Model Context Protocol server for Coronium.io mobile proxy service - manage proxies, check balances, and handle authentication",
   "private": false,
   "type": "module",
@@ -31,13 +31,13 @@
   ],
   "author": "Coronium.io",
   "license": "MIT",
-  "homepage": "https://github.com/coronium/coronium-proxy-mcp#readme",
+  "homepage": "https://github.com/coroniumio/coronium-proxy-mcp#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/coronium/coronium-proxy-mcp.git"
+    "url": "git+https://github.com/coroniumio/coronium-proxy-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/coronium/coronium-proxy-mcp/issues"
+    "url": "https://github.com/coroniumio/coronium-proxy-mcp/issues"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.2.0",
@@ -58,6 +58,7 @@
     "src",
     "README.md",
     "LICENSE",
-    "STARTER_PROMPT.md"
+    ".env.example",
+    "tsconfig.json"
   ]
 }

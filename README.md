@@ -4,8 +4,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Coronium.io](https://img.shields.io/badge/Coronium.io-Mobile%20Proxies-orange)](https://coronium.io)
 [![Dashboard](https://img.shields.io/badge/Dashboard-Manage%20Proxies-green)](https://dashboard.coronium.io)
+[![Version](https://img.shields.io/badge/Version-1.1.0-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
 
-MCP server for [Coronium.io](https://coronium.io) mobile proxy management. Control 4G/5G proxies directly from Claude, Cursor, Cline, VS Code and other MCP-compatible tools. Manage your proxies via [Coronium Dashboard](https://dashboard.coronium.io).
+MCP (Model Context Protocol) server for [Coronium.io](https://coronium.io) mobile proxy management. Control 4G/5G mobile proxies directly from Claude, Cursor, Cline, VS Code and other MCP-compatible AI tools. Manage your proxies via [Coronium Dashboard](https://dashboard.coronium.io).
 
 ## Prerequisites
 
@@ -89,12 +90,30 @@ VS Code 1.102+ has built-in MCP support. Add to your VS Code settings or project
 
 Restart your AI tool to load the MCP server.
 
-## Usage
+## Usage Examples
 
-Simply ask your AI:
-- "Show my Coronium proxies"
-- "Check my crypto balance"
-- "List my saved cards"
+Simply ask your AI assistant:
+
+### Authentication
+- "Authenticate with Coronium" - Sets up your connection (auto-runs when needed)
+- "Check if I'm authenticated" - Verify your authentication status
+
+### Proxy Management
+- "Show my Coronium proxies" - List all your mobile proxies with connection details
+- "Get my mobile proxies" - Alternative command to list proxies
+- "Fetch all MCP proxies from my account" - Detailed proxy information
+
+### IP Rotation (v1.1.0)
+- "Rotate my USA proxy" - Rotate specific country proxy (US, UA, etc.)
+- "Rotate modem US" - Alternative rotation command
+- "Rotate proxy cor_US_41f8d8ff" - Rotate by proxy name or ID
+- "Rotate all proxies" - Rotate all proxy IPs simultaneously
+- "Rotate the proxy 5f6e24c9" - Rotate by dongle ID (first 8+ chars)
+
+### Account Management
+- "Check my crypto balance" - View BTC/USDT balances and deposit addresses
+- "List my saved cards" - Show payment methods on file
+- "Show my payment methods" - Alternative command for cards
 
 The AI will authenticate automatically on first use.
 
@@ -112,20 +131,47 @@ The AI will authenticate automatically on first use.
 
 - 🔐 Secure token storage (AES-256-CBC)
 - 📱 [Mobile proxy](https://coronium.io) management
+- 🔄 **NEW: Proxy IP rotation** - Rotate your mobile proxy IPs on demand
 - 💰 Crypto balance tracking
-- 💳 Payment method management  
+- 💳 Payment method management
 - 🔄 Auto-authentication with [Coronium API](https://dashboard.coronium.io)
 - 🌍 Access proxies from [Dashboard](https://dashboard.coronium.io)
+- 📊 Rotation history tracking
 
-## Available Commands
+## Available MCP Tools
 
-| Command | Description |
-|---------|-------------|
-| `coronium_get_token` | Authenticate (auto-runs when needed) |
-| `coronium_get_proxies` | List all proxies with connection strings |
-| `coronium_get_crypto_balance` | Show BTC/USDT balances |
-| `coronium_get_credit_cards` | Show saved payment methods |
-| `coronium_check_token` | Verify authentication status |
+### Core Tools
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `coronium_get_token` | Authenticate with Coronium (auto-runs when needed) | None - uses env vars |
+| `coronium_check_token` | Verify authentication status | None |
+| `coronium_get_proxies` | List all proxies with connection strings | None |
+| `coronium_get_crypto_balance` | Show BTC/USDT balances and deposit addresses | None |
+| `coronium_get_credit_cards` | Show saved payment methods | None |
+
+### Rotation Tool (v1.1.0)
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `coronium_rotate_modem` | Rotate proxy IP addresses | `proxy_identifier`: Name, ID, country code, or "all" |
+
+#### Rotation Examples
+
+```javascript
+// Rotate by country
+coronium_rotate_modem({ proxy_identifier: "US" })  // Rotates USA proxy
+coronium_rotate_modem({ proxy_identifier: "UA" })  // Rotates Ukraine proxy
+
+// Rotate by proxy name
+coronium_rotate_modem({ proxy_identifier: "cor_US_41f8d8ff52eecd18ce695f3649156cef" })
+
+// Rotate by dongle ID (partial)
+coronium_rotate_modem({ proxy_identifier: "5f6e24c9" })  // First 8+ chars
+
+// Rotate all proxies
+coronium_rotate_modem({ proxy_identifier: "all" })
+```
 
 ## Environment Variables
 
@@ -160,20 +206,38 @@ LOG_LEVEL=info  # debug, info, warn, error
 }
 ```
 
-### Proxy Output Example
+### Tool Response Examples
 
+#### Proxy List Output
 ```
-🔌 Found 4 Proxy Connection(s):
+🔌 Found 2 Proxy Connection(s):
 
-Proxy 1: dongle600_nl
-├─ Connection IP: 138.68.86.247
-├─ HTTP Port: 8600
+Proxy 1: cor_UA_5f6e24c946e34469127e586aac6cee46
+├─ Connection IP: 176.97.62.93
+├─ HTTP Port: 8017
+├─ SOCKS5 Port: 5017
 ├─ Username: admin
-├─ Password: ********
+├─ Password: 6wW4R1Y5B8xK
+├─ External IP: 46.211.66.101
 ├─ Status: 🟢 Online
+├─ Last Rotated: 11/14/2025, 11:49:03 PM
 
-HTTP: http://admin:password@138.68.86.247:8600
-SOCKS5: socks5://admin:password@138.68.86.247:5600
+Connection Strings:
+HTTP: http://admin:6wW4R1Y5B8xK@176.97.62.93:8017
+SOCKS5: socks5://admin:6wW4R1Y5B8xK@176.97.62.93:5017
+```
+
+#### Rotation Success Output
+```
+✅ Successfully rotated cor_US_41f8d8ff52eecd18ce695f3649156cef
+
+├─ Old IP: 172.56.171.66
+├─ New IP: 45.123.67.89
+└─ Rotation time: 13.5s
+
+🌐 Verified new external IP: 45.123.67.89
+
+💡 Tip: Your proxy is now using the new IP address.
 ```
 
 ## Security
