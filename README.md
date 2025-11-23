@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Coronium.io](https://img.shields.io/badge/Coronium.io-Mobile%20Proxies-orange)](https://coronium.io)
 [![Dashboard](https://img.shields.io/badge/Dashboard-Manage%20Proxies-green)](https://dashboard.coronium.io)
-[![Version](https://img.shields.io/badge/Version-1.1.1-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
+[![Version](https://img.shields.io/badge/Version-1.1.2-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
 
 MCP (Model Context Protocol) server for [Coronium.io](https://coronium.io) mobile proxy management. Control 4G/5G mobile proxies directly from Claude, Cursor, Cline, VS Code and other MCP-compatible AI tools. Manage your proxies via [Coronium Dashboard](https://dashboard.coronium.io).
 
@@ -178,16 +178,17 @@ coronium_rotate_modem({ proxy_identifier: "all" })
 
 ## Environment Variables
 
-Create `.env` file:
+Create `.env` file from `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env`:
 
 ```env
-# Required
 CORONIUM_LOGIN=your-email@example.com
 CORONIUM_PASSWORD=your-password
-
-# Optional
-TOKEN_ENCRYPTION_KEY=your-32-byte-hex-key  # Generate: openssl rand -hex 32
-LOG_LEVEL=info  # debug, info, warn, error
 ```
 
 ## API Documentation

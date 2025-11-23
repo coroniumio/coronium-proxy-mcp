@@ -1329,36 +1329,67 @@ async function main() {
           };
         }
 
+        // Initialize rotation manager to check real-time status
+        const rotationManager = new RotationManager(logger);
+
+        // Check real-time status for each proxy
+        logger.info("Checking real-time status for all proxies...");
+        const statusChecks = proxies.map(async (proxy: any) => {
+          if (proxy.statusByToken || proxy.restartToken) {
+            const statusUrl = proxy.statusByToken ||
+              `https://mreset.xyz/get-modem-status/${proxy.restartToken}`;
+            try {
+              logger.debug(`Checking status for ${proxy.name} at ${statusUrl}`);
+              const status = await rotationManager.checkStatus(statusUrl);
+              logger.debug(`Status result for ${proxy.name}: online=${status.online}, ip=${status.currentIp}`);
+              return {
+                ...proxy,
+                isOnline: status.online,
+                realtimeStatus: true
+              };
+            } catch (error: any) {
+              logger.warn(`Failed to check real-time status for ${proxy.name}: ${error.message}`);
+              return proxy;
+            }
+          }
+          logger.debug(`No status URL for ${proxy.name}, skipping real-time check`);
+          return proxy;
+        });
+
+        const proxiesWithStatus = await Promise.all(statusChecks);
+
         // Format proxy information
-        let output = `🔌 **Found ${proxies.length} Proxy Connection(s):**\n\n`;
-        
-        proxies.forEach((proxy: any, index: number) => {
+        let output = `🔌 **Found ${proxiesWithStatus.length} Proxy Connection(s):**\n\n`;
+
+        proxiesWithStatus.forEach((proxy: any, index: number) => {
           const httpPort = proxy.http_port || 8080;
           const socks5Port = proxy.socks_port || (parseInt(httpPort) + 1000);
           const connectionIP = proxy.ip_address || proxy.ext_ip || 'N/A';
           const username = proxy.proxy_login || 'N/A';
           const password = proxy.proxy_password || 'N/A';
-          
+
           output += `**Proxy ${index + 1}: ${proxy.name || 'Unnamed'}**\n`;
           output += `├─ Connection IP: ${connectionIP}\n`;
           output += `├─ HTTP Port: ${httpPort}\n`;
           output += `├─ SOCKS5 Port: ${socks5Port}\n`;
           output += `├─ Username: ${username}\n`;
           output += `├─ Password: ${password}\n`;
-          
+
           if (proxy.ext_ip) {
             output += `├─ External IP: ${proxy.ext_ip}\n`;
           }
-          
+
           if (proxy.isOnline !== undefined) {
-            output += `├─ Status: ${proxy.isOnline ? '🟢 Online' : '🔴 Offline'}\n`;
+            const statusIndicator = proxy.isOnline ? '🟢 Online' : '🔴 Offline';
+            const realtimeNote = proxy.realtimeStatus ? ' (verified)' : '';
+            output += `├─ Status: ${statusIndicator}${realtimeNote}\n`;
           }
-          
+
           if (proxy.rotated_at) {
             const rotatedDate = new Date(proxy.rotated_at);
             output += `├─ Last Rotated: ${rotatedDate.toLocaleString()}\n`;
           }
-          
+
           if (proxy.rotation_interval !== undefined) {
             output += `├─ Rotation Interval: ${proxy.rotation_interval === 0 ? 'Manual' : `${proxy.rotation_interval} minutes`}\n`;
           }
@@ -1385,8 +1416,8 @@ async function main() {
               output += `Status: ${proxy.statusByToken}\n`;
             }
           }
-          
-          if (index < proxies.length - 1) {
+
+          if (index < proxiesWithStatus.length - 1) {
             output += `\n${"─".repeat(50)}\n\n`;
           }
         });

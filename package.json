@@ -1,6 +1,6 @@
 {
   "name": "coronium-proxy-mcp",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Model Context Protocol server for Coronium.io mobile proxy service - manage proxies, check balances, and handle authentication",
   "private": false,
   "type": "module",
