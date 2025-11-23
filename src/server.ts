@@ -836,6 +836,19 @@ interface RotationEntry {
 // ===========================================
 
 /**
+ * Hides the domain in URLs for security
+ */
+function hideUrlDomain(url: string): string {
+  if (!url) return url;
+  try {
+    const urlObj = new URL(url);
+    return `https://[rotation-service]${urlObj.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Filters proxies by status (online/offline)
  */
 function filterByStatus(proxies: any[], status: 'online' | 'offline'): any[] {
@@ -1406,14 +1419,14 @@ async function main() {
           output += `HTTP: http://${username}:${password}@${connectionIP}:${httpPort}\n`;
           output += `SOCKS5: socks5://${username}:${password}@${connectionIP}:${socks5Port}\n`;
 
-          // Add mreset.xyz URLs if available
+          // Add rotation URLs if available (hide domain for security)
           if (proxy.restartByToken || proxy.statusByToken) {
             output += `\n**Rotation URLs:**\n`;
             if (proxy.restartByToken) {
-              output += `Restart: ${proxy.restartByToken}\n`;
+              output += `Restart: ${hideUrlDomain(proxy.restartByToken)}\n`;
             }
             if (proxy.statusByToken) {
-              output += `Status: ${proxy.statusByToken}\n`;
+              output += `Status: ${hideUrlDomain(proxy.statusByToken)}\n`;
             }
           }
 

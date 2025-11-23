@@ -134,6 +134,8 @@ The AI will authenticate automatically on first use.
 - 📱 [Mobile proxy](https://coronium.io) management for 4G/5G networks
 - 🔄 **Proxy IP rotation** - Rotate mobile proxy IPs instantly on demand
 - 🎯 Smart proxy selection - By country, name, dongle ID, or rotate all
+- ✅ **Real-time status verification** - Accurate online/offline status with external validation
+- 🔗 **Rotation URLs** - Direct links to restart modems or check status
 - 💰 Crypto balance tracking (BTC/USDT with deposit addresses)
 - 💳 Payment method management
 - 🔄 Auto-authentication with [Coronium API](https://dashboard.coronium.io)
@@ -216,20 +218,31 @@ CORONIUM_PASSWORD=your-password
 ```
 🔌 Found 2 Proxy Connection(s):
 
-Proxy 1: cor_UA_5f6e24c946e34469127e586aac6cee46
-├─ Connection IP: 176.97.62.93
-├─ HTTP Port: 8017
-├─ SOCKS5 Port: 5017
+Proxy 1: dongle713_fr_haze
+├─ Connection IP: 157.245.67.237
+├─ HTTP Port: 8713
+├─ SOCKS5 Port: 5713
 ├─ Username: admin
-├─ Password: 6wW4R1Y5B8xK
-├─ External IP: 46.211.66.101
-├─ Status: 🟢 Online
-├─ Last Rotated: 11/14/2025, 11:49:03 PM
+├─ Password: 8JEook1kP94e
+├─ External IP: 37.167.58.71
+├─ Status: 🟢 Online (verified)
+├─ Last Rotated: 11/23/2025, 7:51:16 PM
+├─ Rotation Interval: Manual
+├─ Rotation Token: 5ef6601b488b0b707fb6667cc0e5808d
 
 Connection Strings:
-HTTP: http://admin:6wW4R1Y5B8xK@176.97.62.93:8017
-SOCKS5: socks5://admin:6wW4R1Y5B8xK@176.97.62.93:5017
+HTTP: http://admin:8JEook1kP94e@157.245.67.237:8713
+SOCKS5: socks5://admin:8JEook1kP94e@157.245.67.237:5713
+
+Rotation URLs:
+Restart: https://[rotation-service]/restart-modem/5ef6601b488b0b707fb6667cc0e5808d
+Status: https://[rotation-service]/get-modem-status/5ef6601b488b0b707fb6667cc0e5808d
 ```
+
+**New in v1.1.2:**
+- ✅ Real-time status verification - Shows actual modem state with "(verified)" label
+- ✅ Rotation URLs - Direct links to restart modem or check status
+- ✅ Rotation Token - For manual API rotation if needed
 
 #### Rotation Success Output
 ```
@@ -271,7 +284,15 @@ LOG_LEVEL=debug npm run dev
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
 
-### Latest Updates (v1.1.0)
+### Latest Updates
+
+**v1.1.2** (Current)
+- ✅ Real-time status verification - Checks actual modem state, not cached API data
+- 🔗 Rotation URLs displayed - Direct links for restart/status check
+- 🔒 Enhanced security - Domain hiding in rotation URLs
+- 📚 Simplified configuration - Removed optional env vars to reduce confusion
+
+**v1.1.0**
 - ✨ Added IP rotation feature with smart proxy selection
 - 🐛 Fixed country code matching bug (US vs UA)
 - 📊 Added rotation history tracking
