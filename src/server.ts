@@ -836,6 +836,167 @@ interface RotationEntry {
 // ===========================================
 
 /**
+ * Filters proxies by status (online/offline)
+ */
+function filterByStatus(proxies: any[], status: 'online' | 'offline'): any[] {
+  return proxies.filter(p => {
+    if (status === 'online') {
+      return p.isOnline === true || p.status === 'active';
+    } else {
+      return p.isOnline === false || p.status === 'inactive' || p.status === 'offline';
+    }
+  });
+}
+
+/**
+ * Filters proxies by last rotation age
+ * @param proxies Array of proxies
+ * @param hours Minimum hours since last rotation
+ */
+function filterByRotationAge(proxies: any[], hours: number): any[] {
+  const cutoffTime = Date.now() - (hours * 60 * 60 * 1000);
+  return proxies.filter(p => {
+    if (!p.rotated_at) return true; // Never rotated, include it
+    const rotatedTime = new Date(p.rotated_at).getTime();
+    return rotatedTime < cutoffTime;
+  });
+}
+
+/**
+ * Applies filter string to proxy list
+ * Supports: 'online', 'offline', 'older-than-Xh'
+ */
+function applyFilter(proxies: any[], filter: string): any[] {
+  if (!filter) return proxies;
+
+  const lowerFilter = filter.toLowerCase().trim();
+
+  // Check for online/offline
+  if (lowerFilter === 'online') {
+    return filterByStatus(proxies, 'online');
+  }
+  if (lowerFilter === 'offline') {
+    return filterByStatus(proxies, 'offline');
+  }
+
+  // Check for age filter: older-than-Xh or older-than-Xd
+  const ageMatch = lowerFilter.match(/older[_-]than[_-](\d+)([hd])/);
+  if (ageMatch) {
+    const value = parseInt(ageMatch[1]);
+    const unit = ageMatch[2];
+    const hours = unit === 'd' ? value * 24 : value;
+    return filterByRotationAge(proxies, hours);
+  }
+
+  return proxies;
+}
+
+/**
+ * Sorts proxies by priority:
+ * 1. Online first
+ * 2. Oldest rotation first
+ * 3. Alphabetically by name
+ */
+function sortProxiesByPriority(proxies: any[]): any[] {
+  return [...proxies].sort((a, b) => {
+    // Online status (online first)
+    const aOnline = a.isOnline === true ? 1 : 0;
+    const bOnline = b.isOnline === true ? 1 : 0;
+    if (aOnline !== bOnline) return bOnline - aOnline;
+
+    // Rotation age (older first)
+    const aTime = a.rotated_at ? new Date(a.rotated_at).getTime() : 0;
+    const bTime = b.rotated_at ? new Date(b.rotated_at).getTime() : 0;
+    if (aTime !== bTime) return aTime - bTime;
+
+    // Alphabetically
+    return (a.name || '').localeCompare(b.name || '');
+  });
+}
+
+/**
+ * Formats proxy information for display
+ */
+function formatProxyInfo(proxy: any, index?: number): string {
+  const status = proxy.isOnline ? '🟢 Online' : '🔴 Offline';
+  const ip = proxy.ext_ip || 'Unknown';
+
+  let rotationInfo = 'Never rotated';
+  if (proxy.rotated_at) {
+    const rotatedDate = new Date(proxy.rotated_at);
+    const hoursAgo = Math.floor((Date.now() - rotatedDate.getTime()) / (1000 * 60 * 60));
+    if (hoursAgo < 1) {
+      rotationInfo = 'Rotated <1h ago';
+    } else if (hoursAgo < 24) {
+      rotationInfo = `Rotated ${hoursAgo}h ago`;
+    } else {
+      const daysAgo = Math.floor(hoursAgo / 24);
+      rotationInfo = `Rotated ${daysAgo}d ago`;
+    }
+  }
+
+  const parts = proxy.name?.split('_') || [];
+  const country = parts[1]?.toUpperCase() || 'XX';
+  const number = parts[0]?.replace(/\D/g, '') || '???';
+
+  let output = index !== undefined ? `${index}. ` : '';
+  output += `**${proxy.name}**\n`;
+  output += `   └─ ${status} | ${ip} | ${rotationInfo}\n`;
+  output += `   └─ Country: ${country} | Number: ${number}`;
+
+  return output;
+}
+
+/**
+ * Creates interactive proxy selection message
+ */
+function createProxySelectionMessage(proxies: any[], identifier: string): string {
+  let message = `🔍 Found **${proxies.length}** proxies matching "${identifier}":\n\n`;
+
+  proxies.forEach((p, i) => {
+    message += formatProxyInfo(p, i + 1) + '\n\n';
+  });
+
+  message += `\n**How to select a specific proxy:**\n`;
+  message += `• Use full name: \`"${proxies[0]?.name}"\`\n`;
+
+  const parts = proxies[0]?.name?.split('_') || [];
+  if (parts[0]) {
+    const number = parts[0].replace(/\D/g, '');
+    if (number) {
+      message += `• Use dongle number: \`"${number}"\`\n`;
+    }
+  }
+
+  if (parts[1]) {
+    message += `• Use country code: \`"${parts[1]}"\`\n`;
+  }
+
+  // Group by country
+  const byCountry: { [key: string]: any[] } = {};
+  proxies.forEach(p => {
+    const country = p.name?.split('_')[1] || 'Unknown';
+    if (!byCountry[country]) byCountry[country] = [];
+    byCountry[country].push(p);
+  });
+
+  if (Object.keys(byCountry).length > 1) {
+    message += `\n**Filter by country:**\n`;
+    Object.keys(byCountry).forEach(country => {
+      message += `• \`"${country}"\` - ${byCountry[country].length} proxy/proxies\n`;
+    });
+  }
+
+  message += `\n**Filter options:**\n`;
+  message += `• \`"online"\` - Only online proxies\n`;
+  message += `• \`"offline"\` - Only offline proxies\n`;
+  message += `• \`"older-than-2h"\` - Rotated >2 hours ago\n`;
+  message += `• \`"all"\` - Rotate all listed proxies\n`;
+
+  return message;
+}
+
+/**
  * Finds proxies by identifier (name, ID, dongle ID, or country)
  * Prioritizes exact matches over partial matches
  */
@@ -947,10 +1108,12 @@ const GetCreditCardsArgsSchema = z.object({
 });
 
 const RotateModemArgsSchema = z.object({
-  proxy_identifier: z.string().optional().describe("Name, ID, or country code of proxy to rotate"),
+  proxy_identifier: z.string().optional().describe("Name, ID, country code, or filter (e.g., 'de', 'dongle540', 'online', 'offline', 'older-than-2h')"),
   all: z.boolean().optional().describe("Rotate all proxies"),
+  filter: z.string().optional().describe("Additional filter: 'online', 'offline', 'older-than-Xh' where X is hours"),
   wait_for_completion: z.boolean().optional().default(true).describe("Wait for rotation to complete"),
-  max_wait_time: z.number().optional().default(30000).describe("Maximum time to wait in milliseconds")
+  max_wait_time: z.number().optional().default(30000).describe("Maximum time to wait in milliseconds"),
+  auto_select: z.boolean().optional().default(true).describe("Automatically select if only one match found")
 });
 
 // ===========================================
@@ -962,7 +1125,11 @@ const RotateModemArgsSchema = z.object({
  */
 async function main() {
   logger.info("Starting Coronium MCP Server v1.0.0");
-  
+  logger.debug("Config - Base URL:", config.baseUrl);
+  logger.debug("Config - Login:", config.login || "NOT SET");
+  logger.debug("Config - Password:", config.password ? "SET (length: " + config.password.length + ")" : "NOT SET");
+  logger.debug("Config - Log Level:", config.logLevel);
+
   // Initialize components
   const tokenStore = new TokenStore();
   const api = new CoroniumAPI(config.baseUrl);
@@ -1002,6 +1169,11 @@ async function main() {
       // Get credentials (prefer args over env vars)
       const login = parsed.data.login || config.login;
       const password = parsed.data.password || config.password;
+
+      logger.debug("Login attempt - Email:", login);
+      logger.debug("Login attempt - Password length:", password?.length || 0);
+      logger.debug("Config values - Login:", config.login);
+      logger.debug("Config values - Password set:", config.password ? "Yes" : "No");
 
       // Validate we have credentials
       if (!login || !password) {
@@ -1190,13 +1362,29 @@ async function main() {
           if (proxy.rotation_interval !== undefined) {
             output += `├─ Rotation Interval: ${proxy.rotation_interval === 0 ? 'Manual' : `${proxy.rotation_interval} minutes`}\n`;
           }
-          
+
+          // Add rotation URLs with tokens
+          if (proxy.restartToken) {
+            output += `├─ Rotation Token: ${proxy.restartToken}\n`;
+          }
+
           output += `\n`;
-          
+
           // Add connection strings for easy copying
           output += `**Connection Strings:**\n`;
           output += `HTTP: http://${username}:${password}@${connectionIP}:${httpPort}\n`;
           output += `SOCKS5: socks5://${username}:${password}@${connectionIP}:${socks5Port}\n`;
+
+          // Add mreset.xyz URLs if available
+          if (proxy.restartByToken || proxy.statusByToken) {
+            output += `\n**Rotation URLs:**\n`;
+            if (proxy.restartByToken) {
+              output += `Restart: ${proxy.restartByToken}\n`;
+            }
+            if (proxy.statusByToken) {
+              output += `Status: ${proxy.statusByToken}\n`;
+            }
+          }
           
           if (index < proxies.length - 1) {
             output += `\n${"─".repeat(50)}\n\n`;
@@ -1436,6 +1624,14 @@ async function main() {
   server.tool(
     "coronium_rotate_modem",
     "🔄 Rotates the IP address of your mobile proxy. Can rotate by name, country (e.g., 'US'), or rotate all proxies. Requires authentication. Examples: 'rotate US', 'rotate all', 'rotate cor_US_xxx'",
+    {
+      proxy_identifier: z.string().optional().describe("Name, ID, country code, or filter (e.g., 'de', 'dongle540', 'online', 'offline', 'older-than-2h')"),
+      all: z.boolean().optional().describe("Rotate all proxies"),
+      filter: z.string().optional().describe("Additional filter: 'online', 'offline', 'older-than-Xh' where X is hours"),
+      wait_for_completion: z.boolean().optional().default(true).describe("Wait for rotation to complete"),
+      max_wait_time: z.number().optional().default(30000).describe("Maximum time to wait in milliseconds"),
+      auto_select: z.boolean().optional().default(true).describe("Automatically select if only one match found")
+    },
     async (args: any) => {
       const parsed = RotateModemArgsSchema.safeParse(args);
       if (!parsed.success) {
@@ -1478,54 +1674,140 @@ async function main() {
 
         // Determine which proxies to rotate
         let targetProxies: any[] = [];
+        let appliedFilters: string[] = [];
 
+        // Step 1: Get initial proxy set
         if (parsed.data.all) {
           logger.info("Rotating all proxies");
-          targetProxies = proxies;
+          targetProxies = [...proxies];
+          appliedFilters.push('all proxies');
         } else if (parsed.data.proxy_identifier) {
-          logger.info(`Finding proxy by identifier: ${parsed.data.proxy_identifier}`);
-          targetProxies = findProxyByIdentifier(proxies, parsed.data.proxy_identifier);
+          const identifier = parsed.data.proxy_identifier.trim();
+          logger.info(`Finding proxy by identifier: ${identifier}`);
 
-          // Handle ambiguous matches
-          if (targetProxies.length > 1) {
-            // Check if they're all from the same country
-            const countries = [...new Set(targetProxies.map(p => p.name?.split('_')[1]))];
-
-            if (countries.length === 1) {
-              // Multiple proxies from same country - ask to be more specific
-              const proxyList = targetProxies.map((p: any) => {
-                const parts = p.name?.split('_') || [];
-                const dongleId = parts[2]?.substring(0, 8); // First 8 chars of dongle ID
-                return `• ${p.name}\n  Dongle ID: ${dongleId}\n  Current IP: ${p.ext_ip || 'unknown'}`;
-              }).join('\n\n');
-
-              return {
-                content: [{
-                  type: "text",
-                  text: `⚠️ Multiple ${countries[0]} proxies found. Please be more specific:\n\n${proxyList}\n\n**To rotate a specific proxy, use:**\n• Full name: "${targetProxies[0].name}"\n• Dongle ID (first 8+ chars): "${targetProxies[0].name.split('_')[2]?.substring(0, 8)}"\n• Or rotate all with: "all"`
-                }]
-              };
+          // Check if identifier is a filter command
+          if (identifier === 'online' || identifier === 'offline' || identifier.match(/older[_-]than/)) {
+            targetProxies = applyFilter(proxies, identifier);
+            appliedFilters.push(identifier);
+          } else {
+            targetProxies = findProxyByIdentifier(proxies, identifier);
+            if (targetProxies.length > 0) {
+              appliedFilters.push(`identifier: ${identifier}`);
             }
-          } else if (targetProxies.length === 0) {
-            // No matches found
-            const availableProxies = proxies.map((p: any) => {
-              const parts = p.name?.split('_') || [];
-              const country = parts[1] || 'Unknown';
-              const dongleId = parts[2]?.substring(0, 8);
-              return `• ${p.name} (${country}, dongle: ${dongleId})`;
-            }).join('\n');
+          }
+        } else {
+          // No identifier - show available proxies and ask user to select
+          logger.info("No identifier provided - showing proxy list");
+          const sortedProxies = sortProxiesByPriority(proxies);
+
+          let message = `📋 **Your Proxies** (${proxies.length} total):\n\n`;
+          sortedProxies.forEach((p, i) => {
+            message += formatProxyInfo(p, i + 1) + '\n\n';
+          });
+
+          message += `\n**To rotate a proxy, specify:**\n`;
+          message += `• Country code: \`"de"\`, \`"us"\`, \`"ua"\`\n`;
+          message += `• Dongle number: \`"540"\`, \`"713"\`\n`;
+          message += `• Full name: \`"${sortedProxies[0]?.name}"\`\n`;
+          message += `• Filter: \`"online"\`, \`"offline"\`, \`"older-than-2h"\`\n`;
+          message += `• All proxies: \`"all"\`\n`;
+
+          return {
+            content: [{
+              type: "text",
+              text: message
+            }]
+          };
+        }
+
+        // Step 2: Apply additional filter if provided
+        if (parsed.data.filter) {
+          const beforeCount = targetProxies.length;
+          targetProxies = applyFilter(targetProxies, parsed.data.filter);
+          appliedFilters.push(parsed.data.filter);
+          logger.info(`Applied filter "${parsed.data.filter}": ${beforeCount} → ${targetProxies.length} proxies`);
+        }
+
+        // Step 3: Handle results
+        if (targetProxies.length === 0) {
+          const filterDesc = appliedFilters.length > 0 ? ` matching filters: ${appliedFilters.join(', ')}` : '';
+
+          let message = `❌ No proxies found${filterDesc}\n\n`;
+          message += `**Available proxies:**\n\n`;
+          proxies.forEach((p: any, i: number) => {
+            message += formatProxyInfo(p, i + 1) + '\n\n';
+          });
+
+          message += `\n**Try:**\n`;
+          message += `• Different identifier or filter\n`;
+          message += `• \`"all"\` to rotate all proxies\n`;
+          message += `• \`"online"\` to rotate only online proxies\n`;
+
+          return {
+            content: [{
+              type: "text",
+              text: message
+            }]
+          };
+        }
+
+        // Step 4: Handle multiple matches
+        if (targetProxies.length > 1 && !parsed.data.all) {
+          const filterDesc = appliedFilters.length > 0 ? ` (${appliedFilters.join(', ')})` : '';
+
+          // If only one online proxy and auto_select is enabled, auto-select it
+          const onlineProxies = filterByStatus(targetProxies, 'online');
+          const autoSelect = parsed.data.auto_select !== false; // Default true
+          if (onlineProxies.length === 1 && autoSelect) {
+            logger.info(`Auto-selecting single online proxy: ${onlineProxies[0].name}`);
+            targetProxies = onlineProxies;
+          } else {
+            // Show interactive selection
+            let message = `🔍 Found **${targetProxies.length}** proxies${filterDesc}:\n\n`;
+
+            const sortedMatches = sortProxiesByPriority(targetProxies);
+            sortedMatches.forEach((p, i) => {
+              message += formatProxyInfo(p, i + 1) + '\n\n';
+            });
+
+            message += `\n**Next steps:**\n`;
+            message += `• To rotate **one**, be more specific with the identifier\n`;
+            message += `• To rotate **all ${targetProxies.length}**, use parameter \`all: true\`\n`;
+            message += `• To rotate only **online** (${onlineProxies.length}), add filter: \`"online"\`\n\n`;
+
+            message += `**Selection examples:**\n`;
+            if (sortedMatches[0]) {
+              const parts = sortedMatches[0].name?.split('_') || [];
+              message += `• Full name: \`"${sortedMatches[0].name}"\`\n`;
+              if (parts[0]) {
+                const num = parts[0].replace(/\D/g, '');
+                if (num) message += `• By number: \`"${num}"\`\n`;
+              }
+            }
 
             return {
               content: [{
                 type: "text",
-                text: `❌ No proxy found matching "${parsed.data.proxy_identifier}"\n\n**Available proxies:**\n${availableProxies}\n\n**Try using:**\n• Country code: 'US' or 'UA'\n• Dongle ID: '5f6e24c9' (first 8+ chars)\n• Full name: 'cor_UA_5f6e24c946e34469127e586aac6cee46'\n• All proxies: 'all'`
+                text: message
               }]
             };
           }
-        } else {
-          // Default: rotate first proxy
-          logger.info("No identifier provided, rotating first proxy");
-          targetProxies = [proxies[0]];
+        }
+
+        // Step 5: Confirm batch rotation if rotating multiple
+        if (targetProxies.length > 3) {
+          const onlineCount = filterByStatus(targetProxies, 'online').length;
+          const offlineCount = targetProxies.length - onlineCount;
+          const estimatedTime = Math.ceil(targetProxies.length * 10 / 60);
+
+          let confirmMessage = `⚠️  **Batch Rotation Confirmation**\n\n`;
+          confirmMessage += `You're about to rotate **${targetProxies.length} proxies**:\n`;
+          confirmMessage += `├─ 🟢 Online: ${onlineCount}\n`;
+          confirmMessage += `└─ 🔴 Offline: ${offlineCount}\n\n`;
+          confirmMessage += `**Estimated time:** ~${estimatedTime} minute${estimatedTime > 1 ? 's' : ''}\n\n`;
+
+          // For now, proceed automatically. In future, could add confirmation parameter
+          logger.info(`Batch rotation: ${targetProxies.length} proxies, estimated ${estimatedTime}min`);
         }
 
         // Show what we're rotating

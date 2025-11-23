@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Coronium.io](https://img.shields.io/badge/Coronium.io-Mobile%20Proxies-orange)](https://coronium.io)
 [![Dashboard](https://img.shields.io/badge/Dashboard-Manage%20Proxies-green)](https://dashboard.coronium.io)
-[![Version](https://img.shields.io/badge/Version-1.1.0-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
+[![Version](https://img.shields.io/badge/Version-1.1.1-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
 
 MCP (Model Context Protocol) server for [Coronium.io](https://coronium.io) mobile proxy management. Control 4G/5G mobile proxies directly from Claude, Cursor, Cline, VS Code and other MCP-compatible AI tools. Manage your proxies via [Coronium Dashboard](https://dashboard.coronium.io).
 
@@ -120,23 +120,26 @@ The AI will authenticate automatically on first use.
 ## Table of Contents
 
 - [Features](#features)
-- [Available Commands](#available-commands)
+- [Available MCP Tools](#available-mcp-tools)
 - [Environment Variables](#environment-variables)
 - [API Documentation](#api-documentation)
 - [Security](#security)
 - [Development](#development)
+- [Changelog](#changelog)
 - [Support](#support)
 
 ## Features
 
-- 🔐 Secure token storage (AES-256-CBC)
-- 📱 [Mobile proxy](https://coronium.io) management
-- 🔄 **NEW: Proxy IP rotation** - Rotate your mobile proxy IPs on demand
-- 💰 Crypto balance tracking
+- 🔐 Secure token storage (AES-256-CBC encryption)
+- 📱 [Mobile proxy](https://coronium.io) management for 4G/5G networks
+- 🔄 **Proxy IP rotation** - Rotate mobile proxy IPs instantly on demand
+- 🎯 Smart proxy selection - By country, name, dongle ID, or rotate all
+- 💰 Crypto balance tracking (BTC/USDT with deposit addresses)
 - 💳 Payment method management
 - 🔄 Auto-authentication with [Coronium API](https://dashboard.coronium.io)
-- 🌍 Access proxies from [Dashboard](https://dashboard.coronium.io)
-- 📊 Rotation history tracking
+- 🌍 Full access from [Dashboard](https://dashboard.coronium.io)
+- 📊 Rotation history tracking with detailed logs
+- ⚡ Lightning-fast proxy status verification with fallback methods
 
 ## Available MCP Tools
 
@@ -262,6 +265,17 @@ npm run build
 # Enable debug logging
 LOG_LEVEL=debug npm run dev
 ```
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
+
+### Latest Updates (v1.1.0)
+- ✨ Added IP rotation feature with smart proxy selection
+- 🐛 Fixed country code matching bug (US vs UA)
+- 📊 Added rotation history tracking
+- 🔒 Enhanced security and credential handling
+- 📚 Expanded documentation with detailed examples
 
 ## Support
 

@@ -70,6 +70,8 @@ STARTER_PROMPT.md
 AI_STARTER_PROMPT.md
 BUG_FIX_SUMMARY.md
 ROTATION_FEATURE_SUMMARY.md
+MCP_TEST_REPORT.md
+TEST_RESULTS.md
 
 # API response files (test data)
 api-response-*.json
@@ -78,3 +80,21 @@ api-response-*.json
 # Test data
 test-*.json
 *.test.json
+
+# Test scripts
+test-*.js
+test-*.mjs
+*-test.js
+*-test.mjs
+check-*.js
+verify-*.js
+quick-check.mjs
+
+# Backup files
+*.save
+*.backup
+*.bak
+
+# Temporary files
+.env.save
+.env.backup

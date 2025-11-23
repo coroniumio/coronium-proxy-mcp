@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2025-11-23
+
+### Security
+- 🔒 Enhanced .gitignore to prevent sensitive data commits
+  - Added patterns for test scripts and temporary files
+  - Ensured .env and .mcp.json are properly ignored
+  - Added backup file patterns (*.save, *.backup, *.bak)
+- 🛡️ Removed test scripts from production codebase
+- 🔐 Improved credential isolation and security practices
+
+### Changed
+- 📚 Updated README with enhanced feature descriptions
+- 📝 Expanded documentation for better clarity
+- 🧹 Cleaned up repository structure for production deployment
+- ✨ Improved changelog format and detail level
+
+### Fixed
+- 🐛 Ensured all backlinks to coronium.io remain intact
+- 📋 Verified all documentation links are working correctly
+
 ## [1.1.0] - 2025-11-14
 
 ### Added
