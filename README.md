@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Coronium.io](https://img.shields.io/badge/Coronium.io-Mobile%20Proxies-orange)](https://coronium.io)
 [![Dashboard](https://img.shields.io/badge/Dashboard-Manage%20Proxies-green)](https://dashboard.coronium.io)
-[![Version](https://img.shields.io/badge/Version-1.2.2-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
+[![Version](https://img.shields.io/badge/Version-1.2.3-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
 [![npm](https://img.shields.io/npm/v/coronium-proxy-mcp.svg)](https://www.npmjs.com/package/coronium-proxy-mcp)
 
 MCP (Model Context Protocol) server for [Coronium.io](https://coronium.io) mobile (4G/5G) proxy management. Drive the full proxy lifecycle — list, rotate, replace, test, configure auto-rotation, buy, renew, manage subscriptions, open tickets — directly from Claude, Cursor, Cline, VS Code, Zed, Continue, and any other MCP-compatible host. Manage your account at [dashboard.coronium.io](https://dashboard.coronium.io).

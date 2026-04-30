@@ -5,7 +5,7 @@
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {z} from "zod";
 import {api} from "../api-client.js";
-import {ok, err, formatTimestamp} from "../formatters.js";
+import {ok, err, formatTimestamp, unwrap} from "../formatters.js";
 
 export function registerTicketTools(server: McpServer) {
     server.tool(
@@ -18,8 +18,12 @@ export function registerTicketTools(server: McpServer) {
             try {
                 const params: any = {};
                 if (status && status !== "all") params.status = status;
-                const list = await api.get<any[]>("/tickets", params);
-                if (!Array.isArray(list) || list.length === 0) return ok("No tickets.");
+                // Backend response shape: { data: { tickets: [...] } } — double-
+                // wrapped, unlike most v3 endpoints. Walk both layers.
+                const raw = await api.get<any>("/tickets", params);
+                const inner = unwrap<any>(raw);
+                const list: any[] = Array.isArray(inner) ? inner : (inner?.tickets || []);
+                if (list.length === 0) return ok("No tickets.");
                 return ok(list.map((t: any) =>
                     `  ${t._id} | ${t.status?.padEnd(6) || "?"} | ${formatTimestamp(t.updatedAt || t.createdAt)} | ${t.subject || "(no subject)"}`
                 ).join("\n"));

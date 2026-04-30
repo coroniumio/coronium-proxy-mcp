@@ -1,6 +1,6 @@
 {
   "name": "coronium-proxy-mcp",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Model Context Protocol server for Coronium.io mobile (4G/5G) proxies — full lifecycle: list, rotate, replace, test, configure auto-rotation, manage subscriptions, check balances, open tickets.",
   "private": false,
   "type": "module",
