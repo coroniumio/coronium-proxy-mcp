@@ -5,6 +5,74 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-04-30
+
+Major feature release. Tool surface grew from 6 → 34, backend audited
+end-to-end against current production API, codebase modularised.
+
+### Added
+- 🛒 **Full purchase + lifecycle surface** — buy, renew, cancel, replace, test, openvpn
+  - `coronium_list_countries`, `coronium_list_tariffs`, `coronium_list_free_modems`
+  - `coronium_check_coupon`, `coronium_buy_modems_with_balance`, `coronium_renew_modems_with_balance`
+  - `coronium_get_payment_status`
+  - `coronium_replace_modem` (swap dead modems for working ones; same-country guard)
+  - `coronium_test_modem` (live connectivity probe)
+  - `coronium_cancel_modem`, `coronium_get_openvpn_config`
+- 🔄 **Rotation control suite**
+  - `coronium_restart_modem` (authenticated, hits `/v3/modems/:id/restart`)
+  - `coronium_get_rotation_status` (poll real-time rotation state)
+  - `coronium_set_rotation_interval` (configure auto-rotate cadence in seconds)
+  - `coronium_change_proxy_password`
+- 🎯 **Modem configuration**
+  - `coronium_set_modem_metadata` (free-form labels)
+  - `coronium_set_modem_os` (p0f Android/iOS/Windows fingerprint preset)
+- 📧 **Low-balance alert tiers** (matches the `/v1/account/low-balance-threshold`
+  endpoint shipped on the backend 2026-04-30)
+  - `coronium_get_low_balance_threshold`
+  - `coronium_set_low_balance_threshold`
+- 🎫 **Support tickets**
+  - `coronium_list_tickets`, `coronium_get_ticket`, `coronium_create_ticket`
+  - `coronium_reply_to_ticket`, `coronium_archive_ticket`
+- 💵 **Live coin pricing** for crypto-balance USD valuation
+  - CoinGecko free tier with 60s in-memory cache
+  - Falls back to last-cached values then static defaults if rate-limited
+- 🏠 **Account profile + unified balance view**
+  - `coronium_get_account` (profile, role, business data, 2FA state)
+  - `coronium_get_balance` (account_credit + crypto, all in USD with live prices)
+
+### Changed
+- 🧱 **Modularised**: single 2010-line `server.ts` → `src/{config,logger,token-store,api-client,prices,formatters}.ts` + `src/tools/{auth,account,proxies,shop,tickets}.ts`
+- 🔁 **Auto-login on 401**: when `CORONIUM_LOGIN`/`CORONIUM_PASSWORD` are set,
+  any tool that gets a 401 transparently re-mints the token and retries once.
+  Agents no longer need to handle expiry manually.
+- 🌐 **Dual base URL**: `/v1` for legacy account routes, `/v3` for the
+  programmatic-customer surface (proxies, payments, tickets). Configurable
+  via `CORONIUM_BASE_URL` and `CORONIUM_BASE_URL_V3`.
+- 📜 **Cleaner errors**: 401/402/403/404/422/429/5xx mapped to readable
+  messages with the failing route in the prefix.
+- ✅ Version string in code now matches `package.json`.
+
+### Fixed
+- 🐛 Hardcoded coin prices replaced with live fetcher.
+- 🐛 Token expiry no longer requires manual `coronium_get_token` re-call.
+- 🐛 `coronium_get_proxies` filtering now consistent across `country_code`,
+  `online_only`, `expiring_within_days`.
+
+### Compatibility
+- All 6 v1.x tool names retained (`coronium_get_token` / `coronium_check_token` /
+  `coronium_get_proxies` / `coronium_get_crypto_balance` / `coronium_get_credit_cards` /
+  `coronium_rotate_modem`). Agents written against 1.1.x continue to work.
+- New `coronium_login` is a friendlier alias for the established
+  `coronium_get_token` flow; both are present.
+
+### Sibling project
+- Wallet-bound + voucher-gated MCP for new agent-native signups lives at
+  [`@coronium/mcp`](https://www.npmjs.com/package/coronium-mcp) (in the
+  [coronium-ai](https://github.com/bolivian-peru/coronium-ai) repo). This
+  package targets existing customers with email/password; `@coronium/mcp`
+  targets new wallet-onboarded users. Tool surfaces overlap intentionally
+  so an agent can substitute either.
+
 ## [1.1.2] - 2025-11-23
 
 ### Added

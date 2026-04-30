@@ -4,14 +4,15 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Coronium.io](https://img.shields.io/badge/Coronium.io-Mobile%20Proxies-orange)](https://coronium.io)
 [![Dashboard](https://img.shields.io/badge/Dashboard-Manage%20Proxies-green)](https://dashboard.coronium.io)
-[![Version](https://img.shields.io/badge/Version-1.1.2-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
+[![Version](https://img.shields.io/badge/Version-1.2.0-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
 
-MCP (Model Context Protocol) server for [Coronium.io](https://coronium.io) mobile proxy management. Control 4G/5G mobile proxies directly from Claude, Cursor, Cline, VS Code and other MCP-compatible AI tools. Manage your proxies via [Coronium Dashboard](https://dashboard.coronium.io).
+MCP (Model Context Protocol) server for [Coronium.io](https://coronium.io) mobile (4G/5G) proxy management. Drive the full proxy lifecycle — list, rotate, replace, test, configure auto-rotation, buy, renew, manage subscriptions, open tickets — directly from Claude, Cursor, Cline, VS Code, Zed, Continue, and any other MCP-compatible host. Manage your account at [dashboard.coronium.io](https://dashboard.coronium.io).
+
+> **v1.2.0** ships 34 tools (up from 6), full programmatic surface, live coin pricing, transparent token refresh, and a modular codebase. See [CHANGELOG.md](CHANGELOG.md) for details.
 
 ## Prerequisites
 
-- [Coronium.io Account](https://coronium.io) - Sign up for mobile proxies
-- [Buy Mobile Proxies](https://www.coronium.io/buy-mobile-proxies) - Purchase guide
+- A [Coronium.io account](https://coronium.io) — sign up via the dashboard
 - Node.js 18+ installed
 
 ## Quick Start
@@ -25,19 +26,18 @@ npm install
 npm run build
 ```
 
-### 2. Configure Your AI Tool
+### 2. Configure your AI tool
 
-#### Option A: Claude Desktop
+#### Claude Desktop
 
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`  
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
   "mcpServers": {
     "coronium": {
       "command": "node",
-      "args": ["/path/to/coronium-proxy-mcp/dist/server.js"],
+      "args": ["/absolute/path/to/coronium-proxy-mcp/dist/server.js"],
       "env": {
         "CORONIUM_LOGIN": "your-email@example.com",
         "CORONIUM_PASSWORD": "your-password"
@@ -47,266 +47,133 @@ npm run build
 }
 ```
 
-#### Option B: Cursor IDE
+#### Cursor IDE / Cline / VS Code Copilot / Zed / Continue
 
-Add to `.cursor/mcp.json` in your project root:
+Same shape — add to the host's MCP config (`.cursor/mcp.json`, Cline's MCP settings, etc).
 
-```json
-{
-  "mcpServers": {
-    "coronium": {
-      "command": "node",
-      "args": ["/path/to/coronium-proxy-mcp/dist/server.js"],
-      "env": {
-        "CORONIUM_LOGIN": "your-email@example.com",
-        "CORONIUM_PASSWORD": "your-password"
-      }
-    }
-  }
-}
-```
+### 3. Restart your tool
 
-#### Option C: Cline (VS Code Extension)
+Talk to your AI: "list my Coronium proxies", "rotate the Polish one", "show my balance", "open a ticket about modem cor_US_xxx not working".
 
-1. Click MCP Servers icon in Cline panel
-2. Click "Configure MCP Servers"
-3. Add the configuration above
-4. Save - Cline auto-reloads
+## What's new in 1.2.0
 
-#### Option D: VS Code with Copilot
+**Auto-login**: set `CORONIUM_LOGIN`/`CORONIUM_PASSWORD` once and forget about token management — any tool that hits a 401 transparently re-mints and retries. No more "your token expired, please run coronium_get_token".
 
-VS Code 1.102+ has built-in MCP support. Add to your VS Code settings or project config.
+**Live coin pricing**: balance views now show USD valuation pulled live from CoinGecko (60s in-memory cache, falls back gracefully on rate limit).
 
-**Fully MCP-Compatible Tools:**
-- ✅ [Claude Desktop](https://claude.ai) - Native support
-- ✅ [Cursor IDE](https://cursor.sh) - Full MCP support with one-click setup
-- ✅ [Cline](https://github.com/clinebot/cline) - VS Code extension with MCP
-- ✅ [VS Code](https://code.visualstudio.com) - v1.102+ with Copilot
-- ✅ [Zed](https://zed.dev) - Native MCP support
-- ✅ [Sourcegraph Cody](https://sourcegraph.com/cody) - Full support
-- ✅ [Continue](https://continue.dev) - Recent MCP support added
+**34 tools** covering: auth, account, proxies (full lifecycle), shop (browse + buy + renew), and tickets. See [Tool catalogue](#tool-catalogue) below.
 
-### 3. Restart Your Tool
+**Modular codebase**: `src/{config,logger,token-store,api-client,prices,formatters}.ts` plus `src/tools/{auth,account,proxies,shop,tickets}.ts`. The 2010-line single-file from 1.1.x is gone.
 
-Restart your AI tool to load the MCP server.
+## Tool catalogue
 
-## Usage Examples
+### Auth (3)
 
-Simply ask your AI assistant:
+| Tool | Description |
+|------|-------------|
+| `coronium_login` | Authenticate with email + password. Most other tools auto-login on 401, so explicit calls are only needed for re-auth or account switching. |
+| `coronium_check_token` | Verify the cached token is still valid. |
+| `coronium_logout` | Clear the encrypted token cache. |
 
-### Authentication
-- "Authenticate with Coronium" - Sets up your connection (auto-runs when needed)
-- "Check if I'm authenticated" - Verify your authentication status
+### Account (6)
 
-### Proxy Management
-- "Show my Coronium proxies" - List all your mobile proxies with connection details
-- "Get my mobile proxies" - Alternative command to list proxies
-- "Fetch all MCP proxies from my account" - Detailed proxy information
+| Tool | Description |
+|------|-------------|
+| `coronium_get_account` | Profile, role, contact, business data, 2FA state. |
+| `coronium_get_balance` | Unified multi-currency balance: account credit + crypto, all in USD with live prices. |
+| `coronium_get_crypto_balance` | Legacy crypto-only view (BTC/USDT/etc with deposit addresses). |
+| `coronium_get_credit_cards` | Saved Stripe cards (last-4 digits + brand). |
+| `coronium_get_low_balance_threshold` | Get configured email-alert tiers (USD). |
+| `coronium_set_low_balance_threshold` | Set email-alert tiers — e.g. `[100, 300]`. |
 
-### IP Rotation (v1.1.0)
-- "Rotate my USA proxy" - Rotate specific country proxy (US, UA, etc.)
-- "Rotate modem US" - Alternative rotation command
-- "Rotate proxy cor_US_41f8d8ff" - Rotate by proxy name or ID
-- "Rotate all proxies" - Rotate all proxy IPs simultaneously
-- "Rotate the proxy 5f6e24c9" - Rotate by dongle ID (first 8+ chars)
+### Proxies (13)
 
-### Account Management
-- "Check my crypto balance" - View BTC/USDT balances and deposit addresses
-- "List my saved cards" - Show payment methods on file
-- "Show my payment methods" - Alternative command for cards
+| Tool | Description |
+|------|-------------|
+| `coronium_get_proxies` | List proxies with optional filters (`country_code`, `online_only`, `expiring_within_days`). |
+| `coronium_get_proxy` | Full detail for one proxy by `_id` or name. |
+| `coronium_restart_modem` | Authenticated rotation via `/v3/modems/:id/restart`. |
+| `coronium_get_rotation_status` | Poll real-time rotation status (`idle` / `rotating` / `success` / `failed`). |
+| `coronium_rotate_modem` | Token-based rotation via the public reset service (no API token needed). |
+| `coronium_test_modem` | Live connectivity probe through the proxy. |
+| `coronium_replace_modem` | Swap a broken modem for a working one (subscription transfers). |
+| `coronium_set_rotation_interval` | Configure auto-rotation cadence in seconds (0 = manual only). |
+| `coronium_change_proxy_password` | Rotate the HTTP/SOCKS proxy password. |
+| `coronium_set_modem_metadata` | Free-form label, ≤200 chars. |
+| `coronium_set_modem_os` | p0f Android/iOS/Windows/etc fingerprint preset. |
+| `coronium_cancel_modem` | Cancel auto-renew (modem stays usable until current expiry). |
+| `coronium_get_openvpn_config` | Download `.ovpn` config (when supported by the modem). |
 
-The AI will authenticate automatically on first use.
+### Shop (7)
 
-## Table of Contents
+| Tool | Description |
+|------|-------------|
+| `coronium_list_countries` | Countries with stock + free-modem counts. |
+| `coronium_list_tariffs` | Available price plans (with optional country filter). |
+| `coronium_list_free_modems` | Live free-modem inventory. |
+| `coronium_check_coupon` | Validate a coupon code. |
+| `coronium_buy_modems_with_balance` | Buy 1+ modems using account credit. |
+| `coronium_renew_modems_with_balance` | Renew existing modems. |
+| `coronium_get_payment_status` | Check status of a payment by id. |
 
-- [Features](#features)
-- [Available MCP Tools](#available-mcp-tools)
-- [Environment Variables](#environment-variables)
-- [API Documentation](#api-documentation)
-- [Security](#security)
-- [Development](#development)
-- [Changelog](#changelog)
-- [Support](#support)
+### Tickets (5)
 
-## Features
+| Tool | Description |
+|------|-------------|
+| `coronium_list_tickets` | List your tickets (filter by `open` / `closed` / `all`). |
+| `coronium_get_ticket` | Full ticket detail with replies. |
+| `coronium_create_ticket` | Open a new ticket. |
+| `coronium_reply_to_ticket` | Add a reply. |
+| `coronium_archive_ticket` | Close from the customer side. |
 
-- 🔐 Secure token storage (AES-256-CBC encryption)
-- 📱 [Mobile proxy](https://coronium.io) management for 4G/5G networks
-- 🔄 **Proxy IP rotation** - Rotate mobile proxy IPs instantly on demand
-- 🎯 Smart proxy selection - By country, name, dongle ID, or rotate all
-- ✅ **Real-time status verification** - Accurate online/offline status with external validation
-- 🔗 **Rotation URLs** - Direct links to restart modems or check status
-- 💰 Crypto balance tracking (BTC/USDT with deposit addresses)
-- 💳 Payment method management
-- 🔄 Auto-authentication with [Coronium API](https://dashboard.coronium.io)
-- 🌍 Full access from [Dashboard](https://dashboard.coronium.io)
-- 📊 Rotation history tracking with detailed logs
-- ⚡ Lightning-fast proxy status verification with fallback methods
-
-## Available MCP Tools
-
-### Core Tools
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `coronium_get_token` | Authenticate with Coronium (auto-runs when needed) | None - uses env vars |
-| `coronium_check_token` | Verify authentication status | None |
-| `coronium_get_proxies` | List all proxies with connection strings | None |
-| `coronium_get_crypto_balance` | Show BTC/USDT balances and deposit addresses | None |
-| `coronium_get_credit_cards` | Show saved payment methods | None |
-
-### Rotation Tool (v1.1.0)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `coronium_rotate_modem` | Rotate proxy IP addresses | `proxy_identifier`: Name, ID, country code, or "all" |
-
-#### Rotation Examples
-
-```javascript
-// Rotate by country
-coronium_rotate_modem({ proxy_identifier: "US" })  // Rotates USA proxy
-coronium_rotate_modem({ proxy_identifier: "UA" })  // Rotates Ukraine proxy
-
-// Rotate by proxy name
-coronium_rotate_modem({ proxy_identifier: "cor_US_41f8d8ff52eecd18ce695f3649156cef" })
-
-// Rotate by dongle ID (partial)
-coronium_rotate_modem({ proxy_identifier: "5f6e24c9" })  // First 8+ chars
-
-// Rotate all proxies
-coronium_rotate_modem({ proxy_identifier: "all" })
-```
-
-## Environment Variables
-
-Create `.env` file from `.env.example`:
+## Environment
 
 ```bash
 cp .env.example .env
+# edit .env with your credentials
 ```
 
-Then edit `.env`:
-
-```env
-CORONIUM_LOGIN=your-email@example.com
-CORONIUM_PASSWORD=your-password
-```
-
-## API Documentation
-
-### Authentication Flow
-
-1. First request triggers `coronium_get_token`
-2. Token stored encrypted for 30 days
-3. Auto-refreshes when expired
-
-### Response Format
-
-```typescript
-{
-  content: [{
-    type: "text",
-    text: "Response message"
-  }]
-}
-```
-
-### Tool Response Examples
-
-#### Proxy List Output
-```
-🔌 Found 2 Proxy Connection(s):
-
-Proxy 1: dongle713_fr_haze
-├─ Connection IP: 157.245.67.237
-├─ HTTP Port: 8713
-├─ SOCKS5 Port: 5713
-├─ Username: admin
-├─ Password: 8JEook1kP94e
-├─ External IP: 37.167.58.71
-├─ Status: 🟢 Online (verified)
-├─ Last Rotated: 11/23/2025, 7:51:16 PM
-├─ Rotation Interval: Manual
-├─ Rotation Token: 5ef6601b488b0b707fb6667cc0e5808d
-
-Connection Strings:
-HTTP: http://admin:8JEook1kP94e@157.245.67.237:8713
-SOCKS5: socks5://admin:8JEook1kP94e@157.245.67.237:5713
-
-Rotation URLs:
-Restart: https://[rotation-service]/restart-modem/5ef6601b488b0b707fb6667cc0e5808d
-Status: https://[rotation-service]/get-modem-status/5ef6601b488b0b707fb6667cc0e5808d
-```
-
-**New in v1.1.2:**
-- ✅ Real-time status verification - Shows actual modem state with "(verified)" label
-- ✅ Rotation URLs - Direct links to restart modem or check status
-- ✅ Rotation Token - For manual API rotation if needed
-
-#### Rotation Success Output
-```
-✅ Successfully rotated cor_US_41f8d8ff52eecd18ce695f3649156cef
-
-├─ Old IP: 172.56.171.66
-├─ New IP: 45.123.67.89
-└─ Rotation time: 13.5s
-
-🌐 Verified new external IP: 45.123.67.89
-
-💡 Tip: Your proxy is now using the new IP address.
-```
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `CORONIUM_LOGIN` | — | Account email |
+| `CORONIUM_PASSWORD` | — | Account password |
+| `CORONIUM_BASE_URL` | `https://api.coronium.io/v1` | v1 API base |
+| `CORONIUM_BASE_URL_V3` | `https://api.coronium.io/api/v3` | v3 API base (note the `/api` prefix — public vhost strips it for v1 but not for v3) |
+| `CORONIUM_ROTATION_URL` | `https://mreset.xyz` | Token-based rotation endpoint |
+| `CORONIUM_PRICES_URL` | `https://api.coingecko.com/api/v3/simple/price` | Coin price source |
+| `CORONIUM_AUTO_LOGIN` | `1` | Set to `0` to disable transparent re-auth on 401 |
+| `TOKEN_ENCRYPTION_KEY` | random per process | Pin to a 64-hex value to keep cache across restarts |
+| `LOG_LEVEL` | `info` | `error` / `warn` / `info` / `debug` |
 
 ## Security
 
-- Tokens encrypted with AES-256-CBC
-- Credentials never stored in plain text
-- Secure storage in `~/.coronium/`
-- Environment variable isolation
+- Tokens encrypted at rest with AES-256-CBC under a scrypt-derived key
+- Credentials live in env vars or `.env` — never written to source files
+- Cache directory: `~/.coronium/` (token + crypto deposit addresses)
+- All logging goes to **stderr**; stdout is reserved for MCP JSON-RPC
 
 ## Development
 
 ```bash
-# Run development mode
-npm run dev
+npm run dev           # tsx watch mode
+npm test              # vitest
+npm run build         # tsc → dist/
+npm run typecheck     # tsc --noEmit
 
-# Run tests
-npm test
-
-# Build for production
-npm run build
-
-# Enable debug logging
 LOG_LEVEL=debug npm run dev
 ```
 
-## Changelog
+## Sibling project — wallet-bound MCP
 
-See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
-
-### Latest Updates
-
-**v1.1.2** (Current)
-- ✅ Real-time status verification - Checks actual modem state, not cached API data
-- 🔗 Rotation URLs displayed - Direct links for restart/status check
-- 🔒 Enhanced security - Domain hiding in rotation URLs
-- 📚 Simplified configuration - Removed optional env vars to reduce confusion
-
-**v1.1.0**
-- ✨ Added IP rotation feature with smart proxy selection
-- 🐛 Fixed country code matching bug (US vs UA)
-- 📊 Added rotation history tracking
-- 🔒 Enhanced security and credential handling
-- 📚 Expanded documentation with detailed examples
+For agent-native onboarding (no email/password — wallet keypair + voucher), see [`@coronium/mcp`](https://www.npmjs.com/package/coronium-mcp) in the [`coronium-ai`](https://github.com/bolivian-peru/coronium-ai) monorepo. Tool surfaces are intentionally similar so an agent can substitute one for the other based on the user's auth model.
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/coroniumio/coronium-proxy-mcp/issues)
-- **Email**: hello@coronium.io
-- **Main Site**: [Coronium.io](https://coronium.io) - Mobile Proxy Marketplace
-- **Dashboard**: [dashboard.coronium.io](https://dashboard.coronium.io) - Manage Your Proxies
-- **Buy Proxies**: [Purchase Guide](https://www.coronium.io/buy-mobile-proxies)
+- Issues: [GitHub](https://github.com/coroniumio/coronium-proxy-mcp/issues)
+- Email: hello@coronium.io
+- Dashboard: [dashboard.coronium.io](https://dashboard.coronium.io)
+- Buy proxies: [coronium.io/buy-mobile-proxies](https://www.coronium.io/buy-mobile-proxies)
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file
+MIT — see [LICENSE](LICENSE).
