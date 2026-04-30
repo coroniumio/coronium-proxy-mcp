@@ -10,6 +10,17 @@ MCP (Model Context Protocol) server for [Coronium.io](https://coronium.io) mobil
 
 > **v1.2.0** ships 34 tools (up from 6), full programmatic surface, live coin pricing, transparent token refresh, and a modular codebase. See [CHANGELOG.md](CHANGELOG.md) for details.
 
+## Which Coronium MCP do I want?
+
+Two MCP servers exist and both hit the same backend (`https://api.coronium.io/api/v3`). Pick by your starting state:
+
+| You are… | Use | Why |
+|---|---|---|
+| **A Coronium customer** with an existing dashboard.coronium.io email/password | **`coronium-proxy-mcp`** (this repo) | 34 tools across the full lifecycle: tickets, low-balance alerts, OS fingerprinting, modem metadata, account settings, plus the 7 core verbs |
+| **An AI agent** or **a new user** who wants one-command signup, no email | [`coronium-cli` + `coronium-mcp`](https://github.com/bolivian-peru/coronium-ai) | Voucher-gated, wallet-bound (SIWE) signup. 7 minimal verbs. `npx -y coronium-cli init --voucher cor_v1_…` and you have a working JWT |
+
+The two MCPs are intentional siblings, not duplicates — different auth model, different tool depth. Once signed in, both produce JWTs against the same API, so you can switch later if needs change.
+
 ## Prerequisites
 
 - A [Coronium.io account](https://coronium.io) — sign up via the dashboard
