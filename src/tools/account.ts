@@ -142,13 +142,16 @@ export function registerAccountTools(server: McpServer) {
 
     server.tool(
         "coronium_set_low_balance_threshold",
-        "Set low-balance email alert tiers (one or more USD amounts). Email is sent when account_credit dips below each tier. Endpoint shipped 2026-04-30.",
+        "Set low-balance email alert tiers. The backend currently allows exactly these tier values: 100, 300, 500 (USD). Pass any subset — e.g. [100], [100,300], [100,300,500]. Email is sent when account_credit dips below each tier independently.",
         {
-            thresholds: z.array(z.number().nonnegative()).min(1).describe("USD amounts, e.g. [100, 300]. Pass an empty array via `clear: true` to disable all tiers."),
+            thresholds: z.array(z.union([z.literal(100), z.literal(300), z.literal(500)]))
+                .min(0).max(3)
+                .describe("Subset of [100, 300, 500]. Empty array clears all tiers (turns off alerts)."),
         },
         async ({thresholds}) => {
             try {
                 await api.put("/account/low-balance-threshold", {thresholds});
+                if (thresholds.length === 0) return ok("✓ All low-balance tiers cleared (alerts disabled).");
                 return ok(`✓ Saved ${thresholds.length} threshold(s): ${thresholds.map(t => "$" + t).join(", ")}`);
             } catch (e: any) {
                 return err(e.message);

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2026-04-30
+
+### Fixed
+- 🐛 `coronium_set_low_balance_threshold` now correctly enforces the
+  backend's allowed-values constraint (`100`, `300`, `500` USD only).
+  Previous schema accepted any non-negative number; backend rejected
+  values like `200` with a `400` and the MCP surfaced an opaque error.
+  Schema now uses `z.union([z.literal(100), z.literal(300), z.literal(500)])`
+  so the agent gets the constraint at tool-call time, not after a round-trip.
+- 🌐 `/account/low-balance-threshold` GET + PUT mounted on `/api/v3`
+  (previously only on `/api/v1`, so the v3-defaulted MCP couldn't reach
+  them — both tools returned 302 redirects). Now reachable on the
+  canonical base URL. Added to the OpenAPI spec at
+  https://dashboard.coronium.io/api-docs/.
+
 ## [1.2.3] - 2026-04-30
 
 ### Fixed
