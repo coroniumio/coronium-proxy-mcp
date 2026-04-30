@@ -36,7 +36,7 @@ export function registerAccountTools(server: McpServer) {
 
     server.tool(
         "coronium_get_balance",
-        "Get full multi-currency balance: account credit (USD) from the account profile + crypto wallet balances (BTC/USDT/etc) from the deposit-address list, with live USD valuation. Crypto prices cached 60s.",
+        "Get the customer's spendable balance. Shows account_credit (USD wallet — what's actually used to pay for proxies) plus any held crypto balances valued in USD. Crypto prices cached 60s; not shown per row.",
         {},
         async () => {
             try {
@@ -46,25 +46,37 @@ export function registerAccountTools(server: McpServer) {
                     getCoinPrices(),
                 ]);
 
+                // account_credit is the USD ledger the customer spends from. The
+                // /account/crypto-balance endpoint sometimes echoes it back as a
+                // pseudo-coin entry — filter that out so we don't double-count or
+                // try to price it as a coin.
+                const accountCredit = Number(account?.balance ?? 0);
+
                 const lines: string[] = [];
-                let totalUsd = 0;
-                const accountCredit = Number(account?.balance ?? account?.balance?.usd ?? 0);
-                lines.push(`account_credit:  $${accountCredit.toFixed(2)} USD`);
-                totalUsd += accountCredit;
+                lines.push(`account_credit  $${accountCredit.toFixed(2)} USD`);
+                let cryptoUsd = 0;
 
                 if (Array.isArray(cryptoArr)) {
-                    for (const b of cryptoArr) {
-                        const sym = (b.coin || "?").toUpperCase();
-                        const amount = Number(b.balance || 0);
-                        const price = prices[String(b.coin).toLowerCase()] || 0;
-                        const usd = amount * price;
-                        totalUsd += usd;
-                        lines.push(`${sym.padEnd(15)}  ${amount.toFixed(8).padStart(14)} (≈ $${usd.toFixed(2)} @ $${price})`);
+                    const coinRows = cryptoArr.filter(b => String(b.coin || "").toLowerCase() !== "account_credit");
+                    if (coinRows.length) {
+                        lines.push("");
+                        lines.push("crypto deposits:");
+                        for (const b of coinRows) {
+                            const sym = String(b.coin || "?").toUpperCase();
+                            const amount = Number(b.balance || 0);
+                            const price = prices[String(b.coin).toLowerCase()] || 0;
+                            const usd = amount * price;
+                            cryptoUsd += usd;
+                            lines.push(`  ${sym.padEnd(6)} ${amount.toFixed(8).padStart(14)}   ≈ $${usd.toFixed(2)} USD`);
+                        }
                     }
                 }
 
+                const total = accountCredit + cryptoUsd;
                 lines.push("");
-                lines.push(`TOTAL (USD):     $${totalUsd.toFixed(2)}`);
+                lines.push(`spendable:      $${accountCredit.toFixed(2)} USD (account_credit only)`);
+                if (cryptoUsd > 0.01) lines.push(`crypto holdings: $${cryptoUsd.toFixed(2)} USD (deposit to convert to account_credit)`);
+                lines.push(`total value:    $${total.toFixed(2)} USD`);
                 return ok(lines.join("\n"));
             } catch (e: any) {
                 return err(e.message);
@@ -74,16 +86,21 @@ export function registerAccountTools(server: McpServer) {
 
     server.tool(
         "coronium_get_crypto_balance",
-        "Legacy alias retained for backward compat — returns the same crypto-only view the MCP has always exposed (deposit addresses + balances). Prefer coronium_get_balance for the unified view.",
+        "List crypto deposit addresses + balances (BTC, USDT, etc). Use these addresses to top up — incoming transfers convert to account_credit at deposit time. Account_credit itself is excluded; use coronium_get_balance for that.",
         {},
         async () => {
             try {
                 const data = await api.get<any[]>("/account/crypto-balance");
                 if (!Array.isArray(data) || data.length === 0) return ok("No deposit addresses on file.");
-                tokenStore.saveCryptoAddresses(data.map(d => ({coin: d.coin, address: d.address, balance: d.balance})));
-                const lines = data.map(d => {
+                // Drop the pseudo-coin "account_credit" — it's the USD ledger,
+                // not a depositable crypto, and the API echoes it here for
+                // historical reasons.
+                const coins = data.filter(d => String(d.coin || "").toLowerCase() !== "account_credit");
+                if (coins.length === 0) return ok("No crypto deposit addresses (account_credit only).");
+                tokenStore.saveCryptoAddresses(coins.map(d => ({coin: d.coin, address: d.address, balance: d.balance})));
+                const lines = coins.map(d => {
                     const amt = Number(d.balance || 0);
-                    return `${(d.coin || "?").toUpperCase().padEnd(8)}  balance=${amt.toFixed(8)}  address=${d.address}`;
+                    return `${String(d.coin || "?").toUpperCase().padEnd(6)}  balance ${amt.toFixed(8)}   deposit to: ${d.address}`;
                 });
                 return ok(lines.join("\n"));
             } catch (e: any) {
