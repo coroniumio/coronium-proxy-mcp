@@ -137,8 +137,7 @@ cp .env.example .env
 |----------|---------|---------|
 | `CORONIUM_LOGIN` | — | Account email |
 | `CORONIUM_PASSWORD` | — | Account password |
-| `CORONIUM_BASE_URL` | `https://api.coronium.io/v1` | v1 API base |
-| `CORONIUM_BASE_URL_V3` | `https://api.coronium.io/api/v3` | v3 API base (note the `/api` prefix — public vhost strips it for v1 but not for v3) |
+| `CORONIUM_BASE_URL` | `https://api.coronium.io/api/v3` | Canonical production API base. The OpenAPI spec at https://dashboard.coronium.io/api-docs/ lists this as the single supported server URL. |
 | `CORONIUM_ROTATION_URL` | `https://mreset.xyz` | Token-based rotation endpoint |
 | `CORONIUM_PRICES_URL` | `https://api.coingecko.com/api/v3/simple/price` | Coin price source |
 | `CORONIUM_AUTO_LOGIN` | `1` | Set to `0` to disable transparent re-auth on 401 |

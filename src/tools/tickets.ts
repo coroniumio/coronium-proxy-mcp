@@ -18,7 +18,7 @@ export function registerTicketTools(server: McpServer) {
             try {
                 const params: any = {};
                 if (status && status !== "all") params.status = status;
-                const list = await api.v3Get<any[]>("/tickets", params);
+                const list = await api.get<any[]>("/tickets", params);
                 if (!Array.isArray(list) || list.length === 0) return ok("No tickets.");
                 return ok(list.map((t: any) =>
                     `  ${t._id} | ${t.status?.padEnd(6) || "?"} | ${formatTimestamp(t.updatedAt || t.createdAt)} | ${t.subject || "(no subject)"}`
@@ -37,7 +37,7 @@ export function registerTicketTools(server: McpServer) {
         },
         async ({ticket_id}) => {
             try {
-                const t = await api.v3Get(`/tickets/${ticket_id}`);
+                const t = await api.get(`/tickets/${ticket_id}`);
                 return ok(JSON.stringify(t, null, 2));
             } catch (e: any) {
                 return err(e.message);
@@ -55,7 +55,7 @@ export function registerTicketTools(server: McpServer) {
         },
         async ({subject, message, priority}) => {
             try {
-                const r = await api.v3Post("/tickets", {subject, message, priority});
+                const r = await api.post("/tickets", {subject, message, priority});
                 return ok(`✓ Ticket created\n${JSON.stringify(r, null, 2)}`);
             } catch (e: any) {
                 return err(e.message);
@@ -72,7 +72,7 @@ export function registerTicketTools(server: McpServer) {
         },
         async ({ticket_id, message}) => {
             try {
-                const r = await api.v3Post(`/tickets/${ticket_id}/reply`, {message});
+                const r = await api.post(`/tickets/${ticket_id}/reply`, {message});
                 return ok(`✓ Reply posted\n${JSON.stringify(r, null, 2)}`);
             } catch (e: any) {
                 return err(e.message);
@@ -88,7 +88,7 @@ export function registerTicketTools(server: McpServer) {
         },
         async ({ticket_id}) => {
             try {
-                await api.v3Put(`/tickets/${ticket_id}/archive`);
+                await api.put(`/tickets/${ticket_id}/archive`);
                 return ok(`✓ Ticket ${ticket_id} archived.`);
             } catch (e: any) {
                 return err(e.message);

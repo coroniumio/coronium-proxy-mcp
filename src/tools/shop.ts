@@ -16,7 +16,7 @@ export function registerShopTools(server: McpServer) {
         {},
         async () => {
             try {
-                const data = unwrap<any[]>(await api.v3Public("GET", "/countries"));
+                const data = unwrap<any[]>(await api.pub("GET", "/countries"));
                 if (!Array.isArray(data) || data.length === 0) return ok("No countries returned.");
                 return ok(data.map((c: any) => `  ${c.country_code || c.code} — ${c.name}${c.free_count != null ? ` (${c.free_count} free)` : ""}`).join("\n"));
             } catch (e: any) {
@@ -33,7 +33,7 @@ export function registerShopTools(server: McpServer) {
         },
         async ({country_code}) => {
             try {
-                let list = unwrap<any[]>(await api.v3Public("GET", "/tariffs/available"));
+                let list = unwrap<any[]>(await api.pub("GET", "/tariffs/available"));
                 if (!Array.isArray(list)) return err("Unexpected response from /tariffs/available.");
                 if (country_code) {
                     const cc = country_code.toUpperCase();
@@ -64,7 +64,7 @@ export function registerShopTools(server: McpServer) {
             try {
                 const params: any = {};
                 if (country_code) params.country_code = country_code.toUpperCase();
-                const list = unwrap<any[]>(await api.v3Public("GET", "/free-modems", undefined, params));
+                const list = unwrap<any[]>(await api.pub("GET", "/free-modems", undefined, params));
                 if (!Array.isArray(list) || list.length === 0) return ok("No free modems available with those filters.");
                 return ok(`${list.length} stock buckets:\n` + list.slice(0, 50).map((m: any) => `  country_id=${m.country_id || "?"} carrier=${m.carrier_id || "—"} region=${m.region_id || "—"} count=${m.count}`).join("\n"));
             } catch (e: any) {
@@ -81,7 +81,7 @@ export function registerShopTools(server: McpServer) {
         },
         async ({code}) => {
             try {
-                const r = await api.v3Post("/coupons/check", {code});
+                const r = await api.post("/coupons/check", {code});
                 return ok(JSON.stringify(r, null, 2));
             } catch (e: any) {
                 return err(e.message);
@@ -103,7 +103,7 @@ export function registerShopTools(server: McpServer) {
                 const body: any = {tariff_id, count: quantity};
                 if (country_code) body.country_code = country_code.toUpperCase();
                 if (coupon) body.coupon = coupon;
-                const r = await api.v3Post("/payment/buy-modems-with-crypto-balance", body);
+                const r = await api.post("/payment/buy-modems-with-crypto-balance", body);
                 return ok(`✓ Purchase requested\n${JSON.stringify(r, null, 2)}`);
             } catch (e: any) {
                 return err(e.message);
@@ -123,7 +123,7 @@ export function registerShopTools(server: McpServer) {
             try {
                 const body: any = {modem_ids, tariff_id};
                 if (coupon) body.coupon = coupon;
-                const r = await api.v3Post("/payment/renew-modems-with-crypto-balance", body);
+                const r = await api.post("/payment/renew-modems-with-crypto-balance", body);
                 return ok(`✓ Renewal requested\n${JSON.stringify(r, null, 2)}`);
             } catch (e: any) {
                 return err(e.message);
@@ -139,7 +139,7 @@ export function registerShopTools(server: McpServer) {
         },
         async ({payment_id}) => {
             try {
-                const r = await api.v3Get(`/payments/${payment_id}/status`);
+                const r = await api.get(`/payments/${payment_id}/status`);
                 return ok(JSON.stringify(r, null, 2));
             } catch (e: any) {
                 return err(e.message);

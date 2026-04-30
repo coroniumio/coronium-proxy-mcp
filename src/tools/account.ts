@@ -16,7 +16,7 @@ export function registerAccountTools(server: McpServer) {
         {},
         async () => {
             try {
-                const data = await api.v1Get("/account");
+                const data = await api.get("/account");
                 const lines = [
                     `email:          ${data.login || data.email}`,
                     `role:           ${data.roleId ?? data.role ?? "?"}`,
@@ -36,29 +36,24 @@ export function registerAccountTools(server: McpServer) {
 
     server.tool(
         "coronium_get_balance",
-        "Get full multi-currency balance: account credit (USD) plus crypto wallet balances (BTC/ETH/USDT/USDC/TRX) with live USD valuation. Crypto prices cached for 60s.",
+        "Get full multi-currency balance: account credit (USD) from the account profile + crypto wallet balances (BTC/USDT/etc) from the deposit-address list, with live USD valuation. Crypto prices cached 60s.",
         {},
         async () => {
             try {
-                const [balanceArr, accountInfo, prices] = await Promise.all([
-                    api.v1Get<any[]>("/account-balance").catch(() => null),
-                    api.v1Get<any>("/account").catch(() => null),
+                const [account, cryptoArr, prices] = await Promise.all([
+                    api.get<any>("/account").catch(() => null),
+                    api.get<any[]>("/account/crypto-balance").catch(() => null),
                     getCoinPrices(),
                 ]);
 
                 const lines: string[] = [];
                 let totalUsd = 0;
+                const accountCredit = Number(account?.balance ?? account?.balance?.usd ?? 0);
+                lines.push(`account_credit:  $${accountCredit.toFixed(2)} USD`);
+                totalUsd += accountCredit;
 
-                // account_credit comes from /account.balance.usd OR balance array entry
-                const accountCredit = Number(accountInfo?.balance?.usd || 0);
-                if (accountCredit > 0 || (balanceArr && balanceArr.find(b => b.coin === "account_credit"))) {
-                    lines.push(`account_credit:  $${accountCredit.toFixed(2)} USD`);
-                    totalUsd += accountCredit;
-                }
-
-                if (Array.isArray(balanceArr)) {
-                    for (const b of balanceArr) {
-                        if (b.coin === "account_credit") continue;
+                if (Array.isArray(cryptoArr)) {
+                    for (const b of cryptoArr) {
                         const sym = (b.coin || "?").toUpperCase();
                         const amount = Number(b.balance || 0);
                         const price = prices[String(b.coin).toLowerCase()] || 0;
@@ -70,7 +65,6 @@ export function registerAccountTools(server: McpServer) {
 
                 lines.push("");
                 lines.push(`TOTAL (USD):     $${totalUsd.toFixed(2)}`);
-                if (lines.length === 2) return ok("No balance entries found.");
                 return ok(lines.join("\n"));
             } catch (e: any) {
                 return err(e.message);
@@ -84,7 +78,7 @@ export function registerAccountTools(server: McpServer) {
         {},
         async () => {
             try {
-                const data = await api.v1Get<any[]>("/account/crypto-balance");
+                const data = await api.get<any[]>("/account/crypto-balance");
                 if (!Array.isArray(data) || data.length === 0) return ok("No deposit addresses on file.");
                 tokenStore.saveCryptoAddresses(data.map(d => ({coin: d.coin, address: d.address, balance: d.balance})));
                 const lines = data.map(d => {
@@ -104,7 +98,7 @@ export function registerAccountTools(server: McpServer) {
         {},
         async () => {
             try {
-                const data = await api.v1Get<any[]>("/account/card-list");
+                const data = await api.get<any[]>("/account/card-list");
                 if (!Array.isArray(data) || data.length === 0) return ok("No saved cards.");
                 return ok(data.map(c => `  ${c.brand || "?"} **** ${c.last4 || "????"}  exp ${c.exp_month || "??"}/${c.exp_year || "????"}  id=${c._id || c.id}`).join("\n"));
             } catch (e: any) {
@@ -119,7 +113,7 @@ export function registerAccountTools(server: McpServer) {
         {},
         async () => {
             try {
-                const data = await api.v1Get("/account/low-balance-threshold");
+                const data = await api.get("/account/low-balance-threshold");
                 const tiers = data.thresholds || data.tiers || (data.threshold != null ? [data.threshold] : []);
                 if (!tiers.length) return ok("No low-balance tiers configured.");
                 return ok("Configured tiers (USD):\n" + tiers.map((t: number) => `  $${t}`).join("\n"));
@@ -137,7 +131,7 @@ export function registerAccountTools(server: McpServer) {
         },
         async ({thresholds}) => {
             try {
-                await api.v1Put("/account/low-balance-threshold", {thresholds});
+                await api.put("/account/low-balance-threshold", {thresholds});
                 return ok(`✓ Saved ${thresholds.length} threshold(s): ${thresholds.map(t => "$" + t).join(", ")}`);
             } catch (e: any) {
                 return err(e.message);

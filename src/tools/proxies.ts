@@ -11,7 +11,7 @@ import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {z} from "zod";
 import {api} from "../api-client.js";
 import {config} from "../config.js";
-import {ok, err, formatProxyDetail, formatProxyLine, maskUrl} from "../formatters.js";
+import {ok, err, formatProxyDetail, formatProxyLine, maskUrl, unwrap} from "../formatters.js";
 import axios from "axios";
 
 const proxyIdField = z.string().describe("Modem _id (24-char hex) or portId/name (e.g. cor_PL_181fd3aa).");
@@ -22,7 +22,7 @@ async function resolveProxyId(idOrName: string, token?: string): Promise<{_id: s
         return {_id: idOrName, raw: null};
     }
     // Otherwise look up by name/portId in the proxies list.
-    const list = await api.v1Get<any[]>("/account/proxies", undefined, token);
+    const list = unwrap<any[]>(await api.get("/account/proxies", undefined, token));
     const match = (list || []).find((p: any) => p.name === idOrName || p.portId === idOrName);
     if (!match) throw new Error(`No proxy with name or portId "${idOrName}". Try coronium_get_proxies to list yours.`);
     return {_id: match._id, raw: match};
@@ -40,7 +40,7 @@ export function registerProxyTools(server: McpServer) {
         },
         async ({country_code, online_only, expiring_within_days}) => {
             try {
-                let list = await api.v1Get<any[]>("/account/proxies");
+                let list = unwrap<any[]>(await api.get("/account/proxies"));
                 if (!Array.isArray(list)) return err("Unexpected response shape from /account/proxies.");
                 if (country_code) list = list.filter(p => (p.country?.country_code || p.country_code) === country_code.toUpperCase());
                 if (online_only) list = list.filter(p => p.isOnline);
@@ -62,7 +62,7 @@ export function registerProxyTools(server: McpServer) {
         {proxy: proxyIdField},
         async ({proxy}) => {
             try {
-                const list = await api.v1Get<any[]>("/account/proxies");
+                const list = unwrap<any[]>(await api.get("/account/proxies"));
                 const match = (list || []).find((p: any) => p._id === proxy || p.name === proxy || p.portId === proxy);
                 if (!match) return err(`No proxy "${proxy}".`);
                 return ok(formatProxyDetail(match));
@@ -79,7 +79,7 @@ export function registerProxyTools(server: McpServer) {
         async ({proxy}) => {
             try {
                 const {_id} = await resolveProxyId(proxy);
-                const r = await api.v3Post(`/modems/${_id}/restart`);
+                const r = await api.post(`/modems/${_id}/restart`);
                 return ok(`✓ Rotation queued for ${proxy}\n  ${JSON.stringify(r, null, 2)}`);
             } catch (e: any) {
                 return err(e.message);
@@ -94,7 +94,7 @@ export function registerProxyTools(server: McpServer) {
         async ({proxy}) => {
             try {
                 const {_id} = await resolveProxyId(proxy);
-                const r = await api.v3Get(`/modems/${_id}/rotation-status`);
+                const r = await api.get(`/modems/${_id}/rotation-status`);
                 return ok(JSON.stringify(r, null, 2));
             } catch (e: any) {
                 return err(e.message);
@@ -120,7 +120,7 @@ export function registerProxyTools(server: McpServer) {
                     restartUrl = `${config.rotationServiceUrl}/restart-modem/${proxy_identifier}`;
                     statusUrl = `${config.rotationServiceUrl}/get-modem-status/${proxy_identifier}`;
                 } else {
-                    const list = await api.v1Get<any[]>("/account/proxies");
+                    const list = unwrap<any[]>(await api.get("/account/proxies"));
                     const m = (list || []).find((p: any) => p.name === proxy_identifier || p.portId === proxy_identifier || p._id === proxy_identifier);
                     if (!m) return err(`No proxy "${proxy_identifier}".`);
                     modemLabel = m.name || m.portId;
@@ -162,7 +162,7 @@ export function registerProxyTools(server: McpServer) {
         async ({proxy}) => {
             try {
                 const {_id} = await resolveProxyId(proxy);
-                const r = await api.v3Post(`/modems/${_id}/test`);
+                const r = await api.post(`/modems/${_id}/test`);
                 return ok(typeof r === "string" ? r : JSON.stringify(r, null, 2));
             } catch (e: any) {
                 return err(e.message);
@@ -180,7 +180,7 @@ export function registerProxyTools(server: McpServer) {
         async ({proxy, same_country}) => {
             try {
                 const {_id} = await resolveProxyId(proxy);
-                const r = await api.v3Post(`/modems/${_id}/replace`, {same_country});
+                const r = await api.post(`/modems/${_id}/replace`, {same_country});
                 return ok(`✓ Replacement queued for ${proxy}\n  ${JSON.stringify(r, null, 2)}`);
             } catch (e: any) {
                 return err(e.message);
@@ -198,7 +198,7 @@ export function registerProxyTools(server: McpServer) {
         async ({proxy, interval_seconds}) => {
             try {
                 const {_id} = await resolveProxyId(proxy);
-                await api.v3Put(`/modems/${_id}/set-rotation-interval`, {rotation_interval: interval_seconds});
+                await api.put(`/modems/${_id}/set-rotation-interval`, {rotation_interval: interval_seconds});
                 return ok(`✓ Auto-rotation set to every ${interval_seconds}s for ${proxy}`);
             } catch (e: any) {
                 return err(e.message);
@@ -213,7 +213,7 @@ export function registerProxyTools(server: McpServer) {
         async ({proxy}) => {
             try {
                 const {_id} = await resolveProxyId(proxy);
-                const r = await api.v3Put(`/modems/${_id}/change-password`);
+                const r = await api.put(`/modems/${_id}/change-password`);
                 return ok(`✓ Password rotated for ${proxy}\n  new credentials: ${JSON.stringify(r, null, 2)}`);
             } catch (e: any) {
                 return err(e.message);
@@ -231,7 +231,7 @@ export function registerProxyTools(server: McpServer) {
         async ({proxy, metadata}) => {
             try {
                 const {_id} = await resolveProxyId(proxy);
-                await api.v3Put(`/modems/${_id}/set-metadata`, {metadata});
+                await api.put(`/modems/${_id}/set-metadata`, {metadata});
                 return ok(`✓ Metadata set for ${proxy}.`);
             } catch (e: any) {
                 return err(e.message);
@@ -249,7 +249,7 @@ export function registerProxyTools(server: McpServer) {
         async ({proxy, os}) => {
             try {
                 const {_id} = await resolveProxyId(proxy);
-                await api.v3Put(`/modems/${_id}/set-os`, {os});
+                await api.put(`/modems/${_id}/set-os`, {os});
                 return ok(`✓ p0f OS preset set to "${os}" for ${proxy}.`);
             } catch (e: any) {
                 return err(e.message);
@@ -264,7 +264,7 @@ export function registerProxyTools(server: McpServer) {
         async ({proxy}) => {
             try {
                 const {_id} = await resolveProxyId(proxy);
-                const r = await api.v3Post(`/modems/${_id}/cancel`);
+                const r = await api.post(`/modems/${_id}/cancel`);
                 return ok(`✓ Cancellation requested for ${proxy}\n  ${JSON.stringify(r, null, 2)}`);
             } catch (e: any) {
                 return err(e.message);
@@ -279,7 +279,7 @@ export function registerProxyTools(server: McpServer) {
         async ({proxy}) => {
             try {
                 const {_id} = await resolveProxyId(proxy);
-                const r = await api.v3Get(`/modems/${_id}/openvpn`);
+                const r = await api.get(`/modems/${_id}/openvpn`);
                 return ok(typeof r === "string" ? r : JSON.stringify(r, null, 2));
             } catch (e: any) {
                 return err(e.message);

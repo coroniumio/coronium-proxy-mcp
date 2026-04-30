@@ -1,41 +1,47 @@
-// Axios wrapper around api.coronium.io.
+// Axios wrapper around api.coronium.io/api/v3.
 //
 // Two notable behaviours on top of plain axios:
 //
-//   1. Every request appends ?auth_token=<token> from the token store. The
-//      backend accepts the token via query param OR Authorization header;
-//      query param matches the prior version's pattern exactly so users
-//      with cached tokens keep working.
+//   1. Every authenticated request appends ?auth_token=<token>. The
+//      backend accepts the token via query param OR Authorization
+//      header; query param matches the prior version's pattern exactly
+//      so users with cached tokens keep working.
 //
 //   2. On a 401 from any authenticated call, if CORONIUM_LOGIN /
-//      CORONIUM_PASSWORD are present in the environment and auto-login is
-//      not disabled (CORONIUM_AUTO_LOGIN=0), we transparently re-mint a
-//      token and retry the request once. This makes day-to-day use feel
-//      tokenless — agents don't need to handle expiry manually.
+//      CORONIUM_PASSWORD are present and auto-login is not disabled
+//      (CORONIUM_AUTO_LOGIN=0), we transparently re-mint a token and
+//      retry once. Day-to-day use feels tokenless — agents don't have
+//      to handle expiry manually.
+//
+// Concurrency note: a single in-flight login promise is shared so a
+// burst of parallel calls all wait on the same auth round-trip rather
+// than each minting their own token.
 
-import axios, {AxiosInstance, AxiosRequestConfig, AxiosError} from "axios";
+import axios, {AxiosInstance, AxiosRequestConfig} from "axios";
 import {config} from "./config.js";
 import {logger} from "./logger.js";
 import {tokenStore} from "./token-store.js";
 
 export class CoroniumAPI {
-    private v1: AxiosInstance;
-    private v3: AxiosInstance;
+    private client: AxiosInstance;
+    private inFlightLogin: Promise<string> | null = null;
 
     constructor() {
-        this.v1 = axios.create({baseURL: config.baseUrl, timeout: 30000, headers: {"Content-Type": "application/json"}});
-        this.v3 = axios.create({baseURL: config.baseUrlV3, timeout: 30000, headers: {"Content-Type": "application/json"}});
+        this.client = axios.create({
+            baseURL: config.baseUrl,
+            timeout: 30_000,
+            headers: {"Content-Type": "application/json"},
+        });
     }
 
     // ---------- Auth ----------
 
     /**
-     * POST /v1/get-token — exchange email+password for a JWT.
-     * Surfaces friendly messages for 401/429; everything else falls through.
+     * POST /get-token — exchange email+password for a JWT.
      */
     async login(login: string, password: string): Promise<string> {
         try {
-            const r = await this.v1.post("/get-token", {login, password});
+            const r = await this.client.post("/get-token", {login, password});
             const token = r.data?.token;
             if (!token) throw new Error("Login succeeded but server did not return a token.");
             tokenStore.set(token);
@@ -52,13 +58,21 @@ export class CoroniumAPI {
         }
     }
 
+    private async loginShared(): Promise<string> {
+        if (this.inFlightLogin) return this.inFlightLogin;
+        if (!config.login || !config.password) throw new Error("CORONIUM_LOGIN and CORONIUM_PASSWORD must be set for auto-login.");
+        this.inFlightLogin = this.login(config.login, config.password)
+            .finally(() => { this.inFlightLogin = null; });
+        return this.inFlightLogin;
+    }
+
     /**
-     * Quick token validity probe. We hit /v1/account/proxies because that
-     * route is cheap and requires a valid token; 200 = good, 401 = bad.
+     * Quick token validity probe. /account/proxies is cheap and requires
+     * a valid token; 200 = good, 401 = bad.
      */
     async validateToken(token: string): Promise<boolean> {
         try {
-            await this.v1.get("/account/proxies", {params: {auth_token: token}});
+            await this.client.get("/account/proxies", {params: {auth_token: token}});
             return true;
         } catch (e: any) {
             if (axios.isAxiosError(e) && (e.response?.status === 401 || e.response?.status === 403)) return false;
@@ -71,33 +85,25 @@ export class CoroniumAPI {
     private async tokenOrThrow(explicit?: string): Promise<string> {
         const t = explicit || tokenStore.get();
         if (t) return t;
-        // Try auto-login if creds are in env.
         if (config.autoLoginOn401 && config.login && config.password) {
             logger.info("No cached token — auto-logging in.");
-            return await this.login(config.login, config.password);
+            return await this.loginShared();
         }
         throw new Error("Not authenticated. Call coronium_login first or set CORONIUM_LOGIN/CORONIUM_PASSWORD.");
     }
 
-    /**
-     * Authenticated request wrapper. Adds auth_token, retries once on 401
-     * via auto-login, surfaces clean errors.
-     *
-     * @param api which axios instance — "v1" for /v1/* or "v3" for /v3/*
-     */
-    private async authedRequest<T = any>(api: "v1" | "v3", cfg: AxiosRequestConfig, explicitToken?: string): Promise<T> {
-        const inst = api === "v3" ? this.v3 : this.v1;
+    private async authedRequest<T = any>(cfg: AxiosRequestConfig, explicitToken?: string): Promise<T> {
         let token = await this.tokenOrThrow(explicitToken);
         const params = {...(cfg.params || {}), auth_token: token};
         try {
-            const r = await inst.request<T>({...cfg, params});
+            const r = await this.client.request<T>({...cfg, params});
             return r.data;
         } catch (e: any) {
             if (axios.isAxiosError(e) && e.response?.status === 401 && !explicitToken && config.autoLoginOn401 && config.login && config.password) {
                 logger.warn("401 — refreshing token via auto-login and retrying once.");
                 tokenStore.clear();
-                token = await this.login(config.login, config.password);
-                const r = await inst.request<T>({...cfg, params: {...(cfg.params || {}), auth_token: token}});
+                token = await this.loginShared();
+                const r = await this.client.request<T>({...cfg, params: {...(cfg.params || {}), auth_token: token}});
                 return r.data;
             }
             throw this.translateError(e, cfg);
@@ -122,25 +128,18 @@ export class CoroniumAPI {
 
     // ---------- Public route methods ----------
 
-    // v1
-    public v1Get<T = any>(url: string, params?: any, token?: string)            { return this.authedRequest<T>("v1", {method: "GET", url, params}, token); }
-    public v1Post<T = any>(url: string, data?: any, params?: any, token?: string)  { return this.authedRequest<T>("v1", {method: "POST", url, data, params}, token); }
-    public v1Put<T = any>(url: string, data?: any, params?: any, token?: string)   { return this.authedRequest<T>("v1", {method: "PUT", url, data, params}, token); }
-    public v1Delete<T = any>(url: string, params?: any, token?: string)         { return this.authedRequest<T>("v1", {method: "DELETE", url, params}, token); }
-
-    // v3
-    public v3Get<T = any>(url: string, params?: any, token?: string)            { return this.authedRequest<T>("v3", {method: "GET", url, params}, token); }
-    public v3Post<T = any>(url: string, data?: any, params?: any, token?: string)  { return this.authedRequest<T>("v3", {method: "POST", url, data, params}, token); }
-    public v3Put<T = any>(url: string, data?: any, params?: any, token?: string)   { return this.authedRequest<T>("v3", {method: "PUT", url, data, params}, token); }
-    public v3Delete<T = any>(url: string, params?: any, token?: string)         { return this.authedRequest<T>("v3", {method: "DELETE", url, params}, token); }
+    public get<T = any>(url: string, params?: any, token?: string)               { return this.authedRequest<T>({method: "GET", url, params}, token); }
+    public post<T = any>(url: string, data?: any, params?: any, token?: string)  { return this.authedRequest<T>({method: "POST", url, data, params}, token); }
+    public put<T = any>(url: string, data?: any, params?: any, token?: string)   { return this.authedRequest<T>({method: "PUT", url, data, params}, token); }
+    public del<T = any>(url: string, params?: any, token?: string)               { return this.authedRequest<T>({method: "DELETE", url, params}, token); }
 
     /**
-     * Public v3 routes (signup/tariffs/free-modems) don't need auth — call
-     * directly without injecting a token.
+     * Public routes (signup/check-token/tariffs/free-modems/countries)
+     * don't require auth — call directly without injecting a token.
      */
-    public async v3Public<T = any>(method: "GET"|"POST", url: string, data?: any, params?: any): Promise<T> {
+    public async pub<T = any>(method: "GET"|"POST", url: string, data?: any, params?: any): Promise<T> {
         try {
-            const r = await this.v3.request<T>({method, url, data, params});
+            const r = await this.client.request<T>({method, url, data, params});
             return r.data;
         } catch (e: any) {
             throw this.translateError(e, {method, url});

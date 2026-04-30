@@ -35,8 +35,7 @@ async function main() {
     await server.connect(transport);
 
     logger.info(`Coronium MCP v${SERVER_VERSION} ready`);
-    logger.info(`  api v1: ${config.baseUrl}`);
-    logger.info(`  api v3: ${config.baseUrlV3}`);
+    logger.info(`  api: ${config.baseUrl}`);
     if (config.login && config.password) {
         logger.info(`  auto-login: ON (CORONIUM_LOGIN=${config.login})`);
     } else {
