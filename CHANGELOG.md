@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-04-30
+
+### Added
+- 🤖 **Decision guide for AI agents** in README — concrete heuristics for
+  rotate vs replace, stock-out handling, balance interpretation, rotation
+  intervals by use case, ticket-vs-retry, country/carrier selection.
+  Helps Claude/Cursor/Windsurf pick the right tool semantically rather
+  than by name match.
+
+### Changed
+- ✏️ Removed phrasing that mischaracterised the production API as
+  "legacy" — `https://api.coronium.io/api/v3` is Coronium's main
+  production API, serving both the customer dashboard and agent-native
+  integrations.
+
+## [1.2.1] - 2026-04-30
+
+### Added
+- 📦 Published to npm as `coronium-proxy-mcp` — install via
+  `claude mcp add coronium-proxy npx -y coronium-proxy-mcp` instead of
+  cloning + building.
+- 🔀 Top-of-README "Which Coronium MCP do I want?" table cross-linking
+  to [`coronium-cli` + `coronium-mcp`](https://github.com/bolivian-peru/coronium-ai)
+  for new users without an existing dashboard account.
+
+### Fixed
+- 🐛 Renamed bin from `coronium-mcp` → `coronium-proxy-mcp` to avoid
+  global-install collision with the wallet-bound `coronium-mcp` package.
+  Affects only `npm install -g`; `claude mcp add npx -y …` flow is
+  unchanged.
+
 ## [1.2.0] - 2026-04-30
 
 Major feature release. Tool surface grew from 6 → 34, backend audited
@@ -45,9 +76,10 @@ end-to-end against current production API, codebase modularised.
 - 🔁 **Auto-login on 401**: when `CORONIUM_LOGIN`/`CORONIUM_PASSWORD` are set,
   any tool that gets a 401 transparently re-mints the token and retries once.
   Agents no longer need to handle expiry manually.
-- 🌐 **Dual base URL**: `/v1` for legacy account routes, `/v3` for the
-  programmatic-customer surface (proxies, payments, tickets). Configurable
-  via `CORONIUM_BASE_URL` and `CORONIUM_BASE_URL_V3`.
+- 🌐 **Single base URL**: `https://api.coronium.io/api/v3` is the canonical
+  production API for everything — proxies, payments, tickets, account.
+  Configurable via `CORONIUM_BASE_URL` if you're hitting a tenant or
+  staging deployment.
 - 📜 **Cleaner errors**: 401/402/403/404/422/429/5xx mapped to readable
   messages with the failing route in the prefix.
 - ✅ Version string in code now matches `package.json`.

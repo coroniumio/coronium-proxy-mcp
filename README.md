@@ -4,7 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Coronium.io](https://img.shields.io/badge/Coronium.io-Mobile%20Proxies-orange)](https://coronium.io)
 [![Dashboard](https://img.shields.io/badge/Dashboard-Manage%20Proxies-green)](https://dashboard.coronium.io)
-[![Version](https://img.shields.io/badge/Version-1.2.0-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
+[![Version](https://img.shields.io/badge/Version-1.2.2-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
+[![npm](https://img.shields.io/npm/v/coronium-proxy-mcp.svg)](https://www.npmjs.com/package/coronium-proxy-mcp)
 
 MCP (Model Context Protocol) server for [Coronium.io](https://coronium.io) mobile (4G/5G) proxy management. Drive the full proxy lifecycle — list, rotate, replace, test, configure auto-rotation, buy, renew, manage subscriptions, open tickets — directly from Claude, Cursor, Cline, VS Code, Zed, Continue, and any other MCP-compatible host. Manage your account at [dashboard.coronium.io](https://dashboard.coronium.io).
 
@@ -20,6 +21,80 @@ Two MCP servers exist and both hit the same backend (`https://api.coronium.io/ap
 | **An AI agent** or **a new user** who wants one-command signup, no email | [`coronium-cli` + `coronium-mcp`](https://github.com/bolivian-peru/coronium-ai) | Voucher-gated, wallet-bound (SIWE) signup. 7 minimal verbs. `npx -y coronium-cli init --voucher cor_v1_…` and you have a working JWT |
 
 The two MCPs are intentional siblings, not duplicates — different auth model, different tool depth. Once signed in, both produce JWTs against the same API, so you can switch later if needs change.
+
+## Decision guide for AI agents
+
+When this MCP is loaded inside Claude / Cursor / Windsurf / etc., the agent can reach for any of 34 tools. The right choice usually isn't "what's the closest tool name match" — these tools have real semantic differences. Read this once before driving the surface.
+
+### Rotate vs Replace — they are NOT interchangeable
+
+| Symptom | Use | Cost | Why |
+|---|---|---|---|
+| IP got banned by the target site, modem otherwise healthy | `coronium_restart_modem` | free | Same modem, fresh IP from the carrier. ~20-second operation. |
+| Modem hasn't responded in N minutes, multiple `test_modem` failures | `coronium_replace_modem` | free (subscription transfers) | Swap to a different physical modem in the same country. Use this when rotation alone keeps yielding the same dead IP. |
+| Need a different country/carrier | Buy a new one + release the old | $$ | Rotate/replace stay within country. |
+
+**Anti-pattern**: don't loop `coronium_restart_modem` more than 2 times — if rotation keeps returning the same IP, the carrier isn't releasing it. Switch to `coronium_replace_modem`. The backend's stuck-rotation janitor (deployed 2026-04-30) auto-clears stale "rotating" states within 5 min, so a hung rotation isn't a permanent block.
+
+### Stock-out handling
+
+`coronium_buy_modems_with_balance` returns 4xx if the requested country has no inventory. **Don't loop the same call.** Instead:
+
+1. `coronium_list_free_modems` — confirms what stock exists right now
+2. If empty for the target country, fall back to a neighbouring market (US ↔ CA, DE ↔ NL ↔ AT, UK ↔ IE) or alert the human
+3. `coronium_list_tariffs` — surfaces price across countries so you can compare
+
+### Reading balance correctly
+
+`coronium_get_balance` returns three numbers:
+- `account_credit` — USD wallet, **what's actually spent** by buy/renew tools
+- `crypto deposits:` — held but unspent crypto (BTC/USDT/etc.). Will convert to account_credit when deposit is detected; not directly spendable.
+- `total value` — informational, sum across both
+
+Always compare a planned purchase against `account_credit`, not `total value`. A user with $0 account_credit and $50 in undeposited crypto **cannot buy** until the deposit is processed.
+
+### Rotation interval — pick by use case
+
+`coronium_set_rotation_interval` takes seconds. Common values:
+
+| Use case | Interval | Notes |
+|---|---|---|
+| High-volume scraping | 60 s | Maxes carrier rotation cadence; some carriers throttle below 90s |
+| Account farming | 300 s (5 min) | Reduces detection from rotation-frequency fingerprints |
+| Long-lived persona | 1800 s (30 min) | Or 0 (disable auto-rotate, rotate manually only) |
+| Sticky session | 0 | Manual control via `coronium_restart_modem` |
+
+### When to open a ticket vs retry
+
+Open a ticket via `coronium_create_ticket` when:
+- A modem has been "replaced" twice in 24h and still doesn't work — likely server-level issue
+- A payment shows `status: pending` for >10 min after `coronium_buy_modems_with_balance` returned a payment_id
+- An ext_ip never updates despite repeated successful rotations (rare; janitor should catch this)
+
+**Don't** open a ticket for:
+- Stock-out (try a different country first)
+- "My IP got banned" (rotate / replace handles this)
+- "Speed is slow" (carrier-side; not actionable by support)
+
+### Auto-login posture
+
+If `CORONIUM_LOGIN` and `CORONIUM_PASSWORD` are set in the MCP env, **don't** call `coronium_login` proactively. The MCP auto-logs-in on the first 401 and caches the token at `~/.coronium/token.enc` (AES-256-CBC). Manual `coronium_login` is only needed for explicit account switching or token diagnostics.
+
+### Country/carrier selection heuristics
+
+- **Target site is geo-fenced**: pick the same country as the target audience. e.g. US TikTok → US carrier.
+- **Captcha / fraud-detection sensitivity**: prefer 5G T-Mobile (US) or Three (UK) — carrier-grade NAT pools rotate aggressively, so individual IPs look "real residential mobile" rather than datacenter.
+- **Cost-sensitive**: list tariffs by `coronium_list_tariffs --country PL` (Poland Play / Plus) — cheap, high-volume EU pool.
+- **Asia-Pacific**: stock thin. Always `coronium_list_free_modems --country TH/AU/NZ` first.
+
+### Tool-naming distinction (across MCPs)
+
+If the agent has both this MCP and the wallet-bound `coronium-mcp` loaded, the tool prefixes tell it which auth path is active:
+
+- `coronium_*` (this server) → email/password auth, full lifecycle, existing-customer mode
+- `<verb>_<noun>` like `proxy_rotate`, `proxy_buy` ([coronium-mcp](https://github.com/bolivian-peru/coronium-ai)) → wallet/SIWE auth, agent-native mode
+
+Don't mix-and-match in the same session unless you've confirmed the JWTs are the same identity.
 
 ## Prerequisites
 

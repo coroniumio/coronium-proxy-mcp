@@ -1,12 +1,11 @@
 // Runtime configuration. All values flow through environment variables;
-// defaults match the canonical production API surface (v3.1.0).
+// defaults match Coronium's main production API surface (v3.1.0).
 //
 // The OpenAPI spec lives at https://dashboard.coronium.io/api-docs/ and
-// declares ONE production server: https://api.coronium.io/api/v3 — that
-// is the supported route for everything (account, proxies, payments,
-// tariffs, tickets, signup, get-token). The legacy /v1 host paths
-// continue to work because nginx rewrites /v1 → /api/v3, but new
-// integrations should use /api/v3 directly.
+// declares one production server: https://api.coronium.io/api/v3 — that
+// is the route for everything (account, proxies, payments, tariffs,
+// tickets, signup, get-token). New integrations should use /api/v3
+// directly.
 
 import "dotenv/config";
 import crypto from "crypto";
