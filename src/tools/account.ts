@@ -158,4 +158,48 @@ export function registerAccountTools(server: McpServer) {
             }
         }
     );
+
+    server.tool(
+        "coronium_get_payments",
+        "Get the full payment + invoice ledger for the account (for reconciliation / spotting duplicates or overpayments). Differs from coronium_get_payment_status, which checks a single payment.",
+        {},
+        async () => {
+            try {
+                const data = await api.get<any>("/account/payments");
+                return ok(JSON.stringify((data as any)?.data ?? data, null, 2));
+            } catch (e: any) {
+                return err(e.message);
+            }
+        }
+    );
+
+    server.tool(
+        "coronium_get_webhook",
+        "Get the account's modem-lifecycle webhook URL (fires when a dead modem is auto-swapped). null = disabled (notifications via email).",
+        {},
+        async () => {
+            try {
+                const data = await api.get<any>("/account/webhook");
+                return ok(`webhook_url: ${data?.webhook_url || "null (disabled — email fallback)"}`);
+            } catch (e: any) {
+                return err(e.message);
+            }
+        }
+    );
+
+    server.tool(
+        "coronium_set_webhook",
+        "Set or clear the modem-lifecycle webhook. When set, a dead modem is auto-swapped and your HTTPS endpoint receives a JSON POST with old_modem_id + new_modem_id. Pass null/empty to disable.",
+        {
+            webhook_url: z.string().nullable().optional().describe("HTTPS URL (≤500 chars), or null/empty to disable"),
+        },
+        async ({webhook_url}) => {
+            try {
+                const data = await api.put<any>("/account/webhook", {webhook_url: webhook_url ?? null});
+                return ok(data?.message || `webhook_url: ${data?.webhook_url || "null"}`);
+            } catch (e: any) {
+                return err(e.message);
+            }
+        }
+    );
 }

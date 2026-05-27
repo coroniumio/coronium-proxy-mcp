@@ -286,4 +286,48 @@ export function registerProxyTools(server: McpServer) {
             }
         }
     );
+
+    server.tool(
+        "coronium_get_proxy_health",
+        "Liveness/health snapshot for all your proxies (per-modem reachability + recommendation). Call this before retrying through a proxy — stop hammering dead modems; swap them with coronium_replace_modem.",
+        {},
+        async () => {
+            try {
+                const r = await api.get("/account/proxies/health");
+                return ok(JSON.stringify(unwrap(r), null, 2));
+            } catch (e: any) {
+                return err(e.message);
+            }
+        }
+    );
+
+    server.tool(
+        "coronium_get_p0f_options",
+        "List the valid OS fingerprint (p0f) values accepted by coronium_set_modem_os for a modem. Call this first so you don't guess the OS string.",
+        {proxy: proxyIdField},
+        async ({proxy}) => {
+            try {
+                const {_id} = await resolveProxyId(proxy);
+                const r = await api.get(`/modems/${_id}/p0f-options`);
+                return ok(JSON.stringify(unwrap(r), null, 2));
+            } catch (e: any) {
+                return err(e.message);
+            }
+        }
+    );
+
+    server.tool(
+        "coronium_apply_modem_settings",
+        "Re-apply / re-push a modem's port settings on the server (useful after a config change or if a proxy stops responding but the modem is online).",
+        {proxy: proxyIdField},
+        async ({proxy}) => {
+            try {
+                const {_id} = await resolveProxyId(proxy);
+                const r = await api.post(`/modems/${_id}/apply-settings`, {});
+                return ok(JSON.stringify(r, null, 2));
+            } catch (e: any) {
+                return err(e.message);
+            }
+        }
+    );
 }

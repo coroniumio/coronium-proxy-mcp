@@ -18,6 +18,7 @@ import {registerAccountTools} from "./tools/account.js";
 import {registerProxyTools} from "./tools/proxies.js";
 import {registerShopTools} from "./tools/shop.js";
 import {registerTicketTools} from "./tools/tickets.js";
+import {registerPoolTools} from "./tools/pool.js";
 
 async function main() {
     const server = new McpServer({
@@ -30,6 +31,7 @@ async function main() {
     registerProxyTools(server);
     registerShopTools(server);
     registerTicketTools(server);
+    registerPoolTools(server);
 
     const transport = new StdioServerTransport();
     await server.connect(transport);

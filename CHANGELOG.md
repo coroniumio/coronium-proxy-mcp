@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-05-27
+
+### Added (14 tools → 48 total) — covering v3 endpoints shipped since 1.2.4
+
+- **Pool Gateway (pay-per-GB, Proxies.sx)** — `coronium_get_pool_stock`, `coronium_list_pool_keys`, `coronium_build_pool_proxy_url`, `coronium_topup_pool_key`, `coronium_cancel_pool_key`, `coronium_buy_pool_with_balance`, `coronium_list_pool_sessions`, `coronium_close_pool_session`. Return a clear error when the pool tier is disabled (503).
+- **`coronium_get_proxy_health`** — `GET /account/proxies/health`; per-modem liveness so agents stop retrying dead proxies.
+- **`coronium_get_payments`** — `GET /account/payments`; full payment + invoice ledger (reconciliation / duplicate detection).
+- **`coronium_get_p0f_options`** — `GET /modems/{id}/p0f-options`; discover valid OS values for `coronium_set_modem_os`.
+- **`coronium_apply_modem_settings`** — `POST /modems/{id}/apply-settings`.
+- **`coronium_get_webhook` / `coronium_set_webhook`** — `GET`/`PUT /account/webhook`; modem-lifecycle auto-swap webhook.
+
+### Changed
+
+- `coronium_list_tariffs` now surfaces the additive `ip_stack:{ipv4,ipv6,native_ipv6}` field from `/tariffs/available`.
+
 ## [1.2.4] - 2026-04-30
 
 ### Fixed

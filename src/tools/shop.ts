@@ -46,7 +46,14 @@ export function registerShopTools(server: McpServer) {
                     const stock = t.stock != null ? ` | stock=${t.stock}` : "";
                     const cc = t.country_code || "?";
                     const carrier = t.carrier_name ? ` | carrier=${t.carrier_name}` : "";
-                    return `  ${t._id || t.id} — ${t.name} | ${cc} | ${period} | $${price}${carrier}${stock}`;
+                    // ip_stack:{ipv4,ipv6,native_ipv6} — surface IP-stack availability.
+                    let ipTag = "";
+                    if (t.ip_stack) {
+                        if (t.ip_stack.native_ipv6) ipTag = " | IPv6(native)";
+                        else if (t.ip_stack.ipv6 > 0) ipTag = ` | IPv6:${t.ip_stack.ipv6}/IPv4:${t.ip_stack.ipv4}`;
+                        else ipTag = " | IPv4";
+                    }
+                    return `  ${t._id || t.id} — ${t.name} | ${cc} | ${period} | $${price}${carrier}${stock}${ipTag}`;
                 }).join("\n"));
             } catch (e: any) {
                 return err(e.message);

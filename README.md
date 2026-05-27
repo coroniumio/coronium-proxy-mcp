@@ -9,7 +9,7 @@
 
 MCP (Model Context Protocol) server for [Coronium.io](https://coronium.io) mobile (4G/5G) proxy management. Drive the full proxy lifecycle — list, rotate, replace, test, configure auto-rotation, buy, renew, manage subscriptions, open tickets — directly from Claude, Cursor, Cline, VS Code, Zed, Continue, and any other MCP-compatible host. Manage your account at [dashboard.coronium.io](https://dashboard.coronium.io).
 
-> **v1.2.0** ships 34 tools (up from 6), full programmatic surface, live coin pricing, transparent token refresh, and a modular codebase. See [CHANGELOG.md](CHANGELOG.md) for details.
+> **v1.2.0** ships 48 tools (up from 6), full programmatic surface, live coin pricing, transparent token refresh, and a modular codebase. See [CHANGELOG.md](CHANGELOG.md) for details.
 
 ## Which Coronium MCP do I want?
 
@@ -17,14 +17,14 @@ Two MCP servers exist and both hit the same backend (`https://api.coronium.io/ap
 
 | You are… | Use | Why |
 |---|---|---|
-| **A Coronium customer** with an existing dashboard.coronium.io email/password | **`coronium-proxy-mcp`** (this repo) | 34 tools across the full lifecycle: tickets, low-balance alerts, OS fingerprinting, modem metadata, account settings, plus the 7 core verbs |
+| **A Coronium customer** with an existing dashboard.coronium.io email/password | **`coronium-proxy-mcp`** (this repo) | 48 tools across the full lifecycle: tickets, low-balance alerts, OS fingerprinting, modem metadata, account settings, plus the 7 core verbs |
 | **An AI agent** or **a new user** who wants one-command signup, no email | [`coronium-cli` + `coronium-mcp`](https://github.com/bolivian-peru/coronium-ai) | Voucher-gated, wallet-bound (SIWE) signup. 7 minimal verbs. `npx -y coronium-cli init --voucher cor_v1_…` and you have a working JWT |
 
 The two MCPs are intentional siblings, not duplicates — different auth model, different tool depth. Once signed in, both produce JWTs against the same API, so you can switch later if needs change.
 
 ## Decision guide for AI agents
 
-When this MCP is loaded inside Claude / Cursor / Windsurf / etc., the agent can reach for any of 34 tools. The right choice usually isn't "what's the closest tool name match" — these tools have real semantic differences. Read this once before driving the surface.
+When this MCP is loaded inside Claude / Cursor / Windsurf / etc., the agent can reach for any of 48 tools. The right choice usually isn't "what's the closest tool name match" — these tools have real semantic differences. Read this once before driving the surface.
 
 ### Rotate vs Replace — they are NOT interchangeable
 
@@ -147,7 +147,7 @@ Talk to your AI: "list my Coronium proxies", "rotate the Polish one", "show my b
 
 **Live coin pricing**: balance views now show USD valuation pulled live from CoinGecko (60s in-memory cache, falls back gracefully on rate limit).
 
-**34 tools** covering: auth, account, proxies (full lifecycle), shop (browse + buy + renew), and tickets. See [Tool catalogue](#tool-catalogue) below.
+**48 tools** covering: auth, account, proxies (full lifecycle), shop (browse + buy + renew), and tickets. See [Tool catalogue](#tool-catalogue) below.
 
 **Modular codebase**: `src/{config,logger,token-store,api-client,prices,formatters}.ts` plus `src/tools/{auth,account,proxies,shop,tickets}.ts`. The 2010-line single-file from 1.1.x is gone.
 
