@@ -1,6 +1,8 @@
 name: publish-npm
 on:
   workflow_dispatch:
+  push:
+    tags: ['publish-v*']
   release:
     types: [published]
 permissions:
