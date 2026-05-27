@@ -17,7 +17,7 @@ export const config = {
     baseUrl: process.env.CORONIUM_BASE_URL || "https://api.coronium.io/api/v3",
     rotationServiceUrl: process.env.CORONIUM_ROTATION_URL || "https://mreset.xyz",
     pricesUrl: process.env.CORONIUM_PRICES_URL || "https://api.coingecko.com/api/v3/simple/price",
-    login: process.env.CORONIUM_LOGIN,
+    login: process.env.CORONIUM_LOGIN || process.env.CORONIUM_EMAIL,
     password: process.env.CORONIUM_PASSWORD,
     apiToken: process.env.CORONIUM_API_TOKEN, // optional — bypasses login
     tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY || crypto.randomBytes(32).toString("hex"),
