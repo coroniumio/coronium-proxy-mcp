@@ -4,12 +4,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Coronium.io](https://img.shields.io/badge/Coronium.io-Mobile%20Proxies-orange)](https://coronium.io)
 [![Dashboard](https://img.shields.io/badge/Dashboard-Manage%20Proxies-green)](https://dashboard.coronium.io)
-[![Version](https://img.shields.io/badge/Version-1.2.4-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
+[![Version](https://img.shields.io/badge/Version-1.3.0-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
 [![npm](https://img.shields.io/npm/v/coronium-proxy-mcp.svg)](https://www.npmjs.com/package/coronium-proxy-mcp)
 
 MCP (Model Context Protocol) server for [Coronium.io](https://coronium.io) mobile (4G/5G) proxy management. Drive the full proxy lifecycle — list, rotate, replace, test, configure auto-rotation, buy, renew, manage subscriptions, open tickets — directly from Claude, Cursor, Cline, VS Code, Zed, Continue, and any other MCP-compatible host. Manage your account at [dashboard.coronium.io](https://dashboard.coronium.io).
 
-> **Tool count is whatever `tools/list` returns in your installed version — trust that over any number in this README.** The published npm package (`latest`) ships the **~34-tool core lifecycle** (auth, account, shop, proxies, support); `main` here adds the pay-per-GB **pool** tier plus extra account/proxy tools (~48 total) ahead of the next publish. Also: live coin pricing, transparent token refresh, modular codebase. See [CHANGELOG.md](CHANGELOG.md).
+> **Tool count is whatever `tools/list` returns in your installed version — trust that over any number in this README.** This repo (`main`, **v1.3.0**) exposes **48 tools** across 6 groups — auth (3), account (9), pool (8), proxies (16), shop (7), tickets (5) — including the pay-per-GB **Pool Gateway** tier. The published npm `latest` is still **v1.2.4** (the 34-tool core lifecycle, no pool) until 1.3.0 is published; install from source for the full surface. Also: live coin pricing, transparent token refresh, modular codebase. See [CHANGELOG.md](CHANGELOG.md).
 
 > **Mental model + operating principles** live in the canonical agent skill: <https://dashboard.coronium.io/SKILL.md>. In one breath: a Coronium proxy is a *real SIM in a real device* on a carrier CGNAT pool — finite, stateful, physical. Drive it with [code-simplifier](https://github.com/anthropics/claude-plugins-official/blob/main/plugins/code-simplifier/agents/code-simplifier.md) discipline — **smallest sufficient action** (don't rotate when sticky works; `restart` before `replace` before buy-new), **read reality before acting** (`tools/list`, `list_tariffs`, health — don't assume), a **`200` is "accepted," not "done"** (verify the egress IP changed), and **no looping/speculative mutations** (irreversible actions need confirmation). The recipes are defaults, not laws — **compose your own**; only the safety/cost rules and the network's physics (rate limits, finite stock, ~290s carrier sticky window) are fixed.
 
@@ -143,15 +143,31 @@ Same shape — add to the host's MCP config (`.cursor/mcp.json`, Cline's MCP set
 
 Talk to your AI: "list my Coronium proxies", "rotate the Polish one", "show my balance", "open a ticket about modem cor_US_xxx not working".
 
-## What's new in 1.2.0
+## What's new in 1.3.0
 
-**Auto-login**: set `CORONIUM_LOGIN`/`CORONIUM_PASSWORD` once and forget about token management — any tool that hits a 401 transparently re-mints and retries. No more "your token expired, please run coronium_get_token".
+**Pool Gateway (pay-per-GB) — 8 new tools.** A new product alongside dedicated modems: the metered, pay-per-GB **Pool Gateway** (powered by Proxies.sx), bought from your Coronium account balance. `coronium_get_pool_stock`, `coronium_list_pool_keys`, `coronium_build_pool_proxy_url`, `coronium_buy_pool_with_balance`, `coronium_topup_pool_key`, `coronium_cancel_pool_key`, `coronium_list_pool_sessions`, `coronium_close_pool_session`. See [Pool Gateway](#pool-gateway-pay-per-gb) below. Tools return a clear error when the pool tier isn't enabled on your account (HTTP 503).
 
-**Live coin pricing**: balance views now show USD valuation pulled live from CoinGecko (60s in-memory cache, falls back gracefully on rate limit).
+**6 more lifecycle tools** for v3 endpoints shipped since 1.2.4: `coronium_get_proxy_health` (per-modem liveness so agents stop retrying dead proxies), `coronium_get_payments` (full payment + invoice ledger for reconciliation), `coronium_get_p0f_options` (valid OS values for `set_modem_os`), `coronium_apply_modem_settings`, and `coronium_get_webhook` / `coronium_set_webhook` (modem-lifecycle auto-swap webhook).
 
-**Full lifecycle surface** covering: auth, account, proxies (full lifecycle), shop (browse + buy + renew), tickets, and pool (pay-per-GB). The catalogue below documents the complete surface; `tools/list` shows exactly what your installed version exposes (~34 on the published npm `latest`, ~48 on `main`). See [Tool catalogue](#tool-catalogue) below.
+**`coronium_list_tariffs`** now surfaces the additive `ip_stack: {ipv4, ipv6, native_ipv6}` field from `/tariffs/available`.
 
-**Modular codebase**: `src/{config,logger,token-store,api-client,prices,formatters}.ts` plus `src/tools/{auth,account,proxies,shop,tickets}.ts`. The 2010-line single-file from 1.1.x is gone.
+**Carried over from 1.2.x:** auto-login (set `CORONIUM_LOGIN`/`CORONIUM_PASSWORD` once — any 401 transparently re-mints and retries), live coin pricing (USD valuations from CoinGecko, 60s cache), and the modular codebase (`src/{config,logger,token-store,api-client,prices,formatters}.ts` + `src/tools/{auth,account,pool,proxies,shop,tickets}.ts`).
+
+## Pool Gateway (pay-per-GB)
+
+Two ways to get a Coronium proxy:
+
+| | **Dedicated modem** (the classic product) | **Pool Gateway** (new in 1.3.0) |
+|---|---|---|
+| What you get | One real SIM in one real device, yours for the tariff period | A metered credential into a shared mobile pool, billed per GB |
+| Billing | Flat tariff (subscription) | Pay-per-GB from your account balance |
+| Buy with | `coronium_buy_modems_with_balance` | `coronium_buy_pool_with_balance` (pass a **pool** `tariff_id` from `coronium_list_tariffs`) |
+| Use | `coronium_get_proxy` → credentials on a dedicated host | `coronium_build_pool_proxy_url` → `gw.proxies.sx` + a `pak_` key |
+| Best for | Account warming, held IP, full device control | Scraping, bursty/elastic GB, many countries without one modem each |
+
+The Pool Gateway is the same metered mobile pool offered by **[Proxies.sx](https://proxies.sx)** — Coronium resells access to it from your balance. If you are a **wallet-only AI agent** that wants to buy pool access directly with **USDC** (no account, x402 protocol), use the Proxies.sx agent path instead: `GET https://api.proxies.sx/v1/x402/pool` (see <https://agents.proxies.sx>). This Coronium MCP is the right tool when you already have a Coronium balance.
+
+Typical flow: `coronium_list_tariffs` (find a pool tariff) → `coronium_buy_pool_with_balance` → `coronium_build_pool_proxy_url` → use it → `coronium_topup_pool_key` when GB runs low. Sessions: `coronium_list_pool_sessions` / `coronium_close_pool_session`.
 
 ## Tool catalogue
 
@@ -163,34 +179,55 @@ Talk to your AI: "list my Coronium proxies", "rotate the Polish one", "show my b
 | `coronium_check_token` | Verify the cached token is still valid. |
 | `coronium_logout` | Clear the encrypted token cache. |
 
-### Account (6)
+### Account (9)
 
 | Tool | Description |
 |------|-------------|
 | `coronium_get_account` | Profile, role, contact, business data, 2FA state. |
 | `coronium_get_balance` | Unified multi-currency balance: account credit + crypto, all in USD with live prices. |
-| `coronium_get_crypto_balance` | Legacy crypto-only view (BTC/USDT/etc with deposit addresses). |
+| `coronium_get_crypto_balance` | Crypto deposit addresses + balances (BTC/USDT/etc). Use these addresses to top up. |
 | `coronium_get_credit_cards` | Saved Stripe cards (last-4 digits + brand). |
 | `coronium_get_low_balance_threshold` | Get configured email-alert tiers (USD). |
-| `coronium_set_low_balance_threshold` | Set email-alert tiers — e.g. `[100, 300]`. |
+| `coronium_set_low_balance_threshold` | Set email-alert tiers — backend allows tiers 100 / 300 / 500 (USD). |
+| `coronium_get_payments` | Full payment + invoice ledger for the account (reconciliation, duplicate/overpayment detection). |
+| `coronium_get_webhook` | Get the account's modem-lifecycle webhook config. |
+| `coronium_set_webhook` | Set or clear the modem-lifecycle webhook — a dead modem auto-swaps and your HTTPS endpoint is notified. |
 
-### Proxies (13)
+### Pool (8)
+
+The pay-per-GB **Pool Gateway** tier (see [Pool Gateway](#pool-gateway-pay-per-gb)). Tools return HTTP 503 with a clear message if the pool tier is not enabled on your account.
+
+| Tool | Description |
+|------|-------------|
+| `coronium_get_pool_stock` | Live pool stock availability (countries + counts). |
+| `coronium_list_pool_keys` | List your pay-per-GB pool keys (status, traffic remaining, tariff). |
+| `coronium_build_pool_proxy_url` | Build a usable proxy URL (or URLs) for an active pool key — host `gw.proxies.sx` + credentials. |
+| `coronium_buy_pool_with_balance` | Buy a pool key using account balance. Pass a **pool** `tariff_id` (from `coronium_list_tariffs`). |
+| `coronium_topup_pool_key` | Add traffic/credit to an existing pool key. |
+| `coronium_cancel_pool_key` | Cancel a pool key. |
+| `coronium_list_pool_sessions` | List your currently-open sticky pool sessions. |
+| `coronium_close_pool_session` | Close one pool session (pass `session_key`) or all of them (omit it). |
+
+### Proxies (16)
 
 | Tool | Description |
 |------|-------------|
 | `coronium_get_proxies` | List proxies with optional filters (`country_code`, `online_only`, `expiring_within_days`). |
-| `coronium_get_proxy` | Full detail for one proxy by `_id` or name. |
-| `coronium_restart_modem` | Authenticated rotation via `/v3/modems/:id/restart`. |
-| `coronium_get_rotation_status` | Poll real-time rotation status (`idle` / `rotating` / `success` / `failed`). |
+| `coronium_get_proxy` | Full detail for one proxy by `_id` or name (credentials, expiry, external IP, rotation interval). |
+| `coronium_restart_modem` | Authenticated rotation (new IP) via `/v3/modems/:id/restart`. |
+| `coronium_get_rotation_status` | Poll real-time rotation status (`idle` / `rotating` / `success` / `failed`) + current/previous IP. |
 | `coronium_rotate_modem` | Token-based rotation via the public reset service (no API token needed). |
 | `coronium_test_modem` | Live connectivity probe through the proxy. |
-| `coronium_replace_modem` | Swap a broken modem for a working one (subscription transfers). |
+| `coronium_replace_modem` | Swap a broken/dead modem for a working one of the same country/tariff (subscription transfers). |
 | `coronium_set_rotation_interval` | Configure auto-rotation cadence in seconds (0 = manual only). |
-| `coronium_change_proxy_password` | Rotate the HTTP/SOCKS proxy password. |
-| `coronium_set_modem_metadata` | Free-form label, ≤200 chars. |
-| `coronium_set_modem_os` | p0f Android/iOS/Windows/etc fingerprint preset. |
+| `coronium_change_proxy_password` | Rotate the HTTP/SOCKS proxy password (new random password returned). |
+| `coronium_set_modem_metadata` | Free-form label/note on a modem. |
+| `coronium_set_modem_os` | Set the p0f OS fingerprint preset (Android / iOS / Windows / etc). |
 | `coronium_cancel_modem` | Cancel auto-renew (modem stays usable until current expiry). |
-| `coronium_get_openvpn_config` | Download `.ovpn` config (when supported by the modem). |
+| `coronium_get_openvpn_config` | Download the `.ovpn` config (when the modem supports VPN tunnel access). |
+| `coronium_get_proxy_health` | Liveness/health snapshot for all your proxies (per-modem reachability + recommendation). |
+| `coronium_get_p0f_options` | List valid OS fingerprint values accepted by `coronium_set_modem_os` for a modem. |
+| `coronium_apply_modem_settings` | Re-apply / re-push a modem's settings (`POST /modems/:id/apply-settings`). |
 
 ### Shop (7)
 
