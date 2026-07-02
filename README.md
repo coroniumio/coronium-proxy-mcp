@@ -4,12 +4,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Coronium.io](https://img.shields.io/badge/Coronium.io-Mobile%20Proxies-orange)](https://coronium.io)
 [![Dashboard](https://img.shields.io/badge/Dashboard-Manage%20Proxies-green)](https://dashboard.coronium.io)
-[![Version](https://img.shields.io/badge/Version-1.2.4-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
+[![Version](https://img.shields.io/badge/Version-1.3.0-success)](https://github.com/coroniumio/coronium-proxy-mcp/releases)
 [![npm](https://img.shields.io/npm/v/coronium-proxy-mcp.svg)](https://www.npmjs.com/package/coronium-proxy-mcp)
 
 MCP (Model Context Protocol) server for [Coronium.io](https://coronium.io) mobile (4G/5G) proxy management. Drive the full proxy lifecycle — list, rotate, replace, test, configure auto-rotation, buy, renew, manage subscriptions, open tickets — directly from Claude, Cursor, Cline, VS Code, Zed, Continue, and any other MCP-compatible host. Manage your account at [dashboard.coronium.io](https://dashboard.coronium.io).
 
-> **Tool count is whatever `tools/list` returns in your installed version — trust that over any number in this README.** The published npm package (`latest`) ships the **~34-tool core lifecycle** (auth, account, shop, proxies, support); `main` here adds the pay-per-GB **pool** tier plus extra account/proxy tools (~48 total) ahead of the next publish. Also: live coin pricing, transparent token refresh, modular codebase. See [CHANGELOG.md](CHANGELOG.md).
+> **Tool count is whatever `tools/list` returns in your installed version — trust that over any number in this README.** The published npm package (`latest`, 1.3.0) ships the full **48-tool** surface: the core lifecycle (auth, account, shop, proxies, support) plus the pay-per-GB **pool** tier and the proxy-health / payments-ledger / webhook tools. Also: live coin pricing, transparent token refresh, modular codebase. See [CHANGELOG.md](CHANGELOG.md).
 
 > **Mental model + operating principles** live in the canonical agent skill: <https://dashboard.coronium.io/SKILL.md>. In one breath: a Coronium proxy is a *real SIM in a real device* on a carrier CGNAT pool — finite, stateful, physical. Drive it with [code-simplifier](https://github.com/anthropics/claude-plugins-official/blob/main/plugins/code-simplifier/agents/code-simplifier.md) discipline — **smallest sufficient action** (don't rotate when sticky works; `restart` before `replace` before buy-new), **read reality before acting** (`tools/list`, `list_tariffs`, health — don't assume), a **`200` is "accepted," not "done"** (verify the egress IP changed), and **no looping/speculative mutations** (irreversible actions need confirmation). The recipes are defaults, not laws — **compose your own**; only the safety/cost rules and the network's physics (rate limits, finite stock, ~290s carrier sticky window) are fixed.
 
@@ -19,7 +19,7 @@ Two MCP servers exist and both hit the same backend (`https://api.coronium.io/ap
 
 | You are… | Use | Why |
 |---|---|---|
-| **A Coronium customer** with an existing dashboard.coronium.io email/password | **`coronium-proxy-mcp`** (this repo) | The full lifecycle surface (run `tools/list` for the exact set — ~34 on npm, ~48 on `main`): tickets, low-balance alerts, OS fingerprinting, modem metadata, account settings, pool, plus the 7 core verbs |
+| **A Coronium customer** with an existing dashboard.coronium.io email/password | **`coronium-proxy-mcp`** (this repo) | The full lifecycle surface (run `tools/list` for the exact set — 48 as of 1.3.0): tickets, low-balance alerts, OS fingerprinting, modem metadata, account settings, pool, plus the 7 core verbs |
 | **An AI agent** or **a new user** who wants one-command signup, no email | [`coronium-cli` + `coronium-mcp`](https://github.com/bolivian-peru/coronium-ai) | Voucher-gated, wallet-bound (SIWE) signup. 7 minimal verbs. `npx -y coronium-cli init --voucher cor_v1_…` and you have a working JWT |
 
 The two MCPs are intentional siblings, not duplicates — different auth model, different tool depth. Once signed in, both produce JWTs against the same API, so you can switch later if needs change.
@@ -143,13 +143,17 @@ Same shape — add to the host's MCP config (`.cursor/mcp.json`, Cline's MCP set
 
 Talk to your AI: "list my Coronium proxies", "rotate the Polish one", "show my balance", "open a ticket about modem cor_US_xxx not working".
 
+## What's new in 1.3.0
+
+**+14 tools → 48 total.** Adds the pay-per-GB **Pool** tier (8 tools: stock, keys, proxy-URL builder, top-up, cancel, buy-with-balance, sessions), plus `coronium_get_proxy_health` (per-modem liveness so agents stop retrying dead proxies), `coronium_get_payments` (full payment + invoice ledger for reconciliation), `coronium_get_p0f_options` (valid OS-fingerprint values), `coronium_apply_modem_settings`, and `coronium_get_webhook` / `coronium_set_webhook` (modem-lifecycle auto-swap webhook). `coronium_list_tariffs` now surfaces the additive `ip_stack` field.
+
 ## What's new in 1.2.0
 
 **Auto-login**: set `CORONIUM_LOGIN`/`CORONIUM_PASSWORD` once and forget about token management — any tool that hits a 401 transparently re-mints and retries. No more "your token expired, please run coronium_get_token".
 
 **Live coin pricing**: balance views now show USD valuation pulled live from CoinGecko (60s in-memory cache, falls back gracefully on rate limit).
 
-**Full lifecycle surface** covering: auth, account, proxies (full lifecycle), shop (browse + buy + renew), tickets, and pool (pay-per-GB). The catalogue below documents the complete surface; `tools/list` shows exactly what your installed version exposes (~34 on the published npm `latest`, ~48 on `main`). See [Tool catalogue](#tool-catalogue) below.
+**Full lifecycle surface** covering: auth, account, proxies (full lifecycle), shop (browse + buy + renew), tickets, and pool (pay-per-GB). The catalogue below documents the complete surface; `tools/list` shows exactly what your installed version exposes (48 as of the published npm `latest`, 1.3.0). See [Tool catalogue](#tool-catalogue) below.
 
 **Modular codebase**: `src/{config,logger,token-store,api-client,prices,formatters}.ts` plus `src/tools/{auth,account,proxies,shop,tickets}.ts`. The 2010-line single-file from 1.1.x is gone.
 
@@ -163,7 +167,7 @@ Talk to your AI: "list my Coronium proxies", "rotate the Polish one", "show my b
 | `coronium_check_token` | Verify the cached token is still valid. |
 | `coronium_logout` | Clear the encrypted token cache. |
 
-### Account (6)
+### Account (9)
 
 | Tool | Description |
 |------|-------------|
@@ -173,8 +177,11 @@ Talk to your AI: "list my Coronium proxies", "rotate the Polish one", "show my b
 | `coronium_get_credit_cards` | Saved Stripe cards (last-4 digits + brand). |
 | `coronium_get_low_balance_threshold` | Get configured email-alert tiers (USD). |
 | `coronium_set_low_balance_threshold` | Set email-alert tiers — e.g. `[100, 300]`. |
+| `coronium_get_payments` | Full payment + invoice ledger (`GET /account/payments`) for reconciliation / duplicate detection. |
+| `coronium_get_webhook` | Get the configured modem-lifecycle auto-swap webhook URL (`GET /account/webhook`). |
+| `coronium_set_webhook` | Set/clear the modem-lifecycle webhook URL (`PUT /account/webhook`). |
 
-### Proxies (13)
+### Proxies (16)
 
 | Tool | Description |
 |------|-------------|
@@ -191,6 +198,9 @@ Talk to your AI: "list my Coronium proxies", "rotate the Polish one", "show my b
 | `coronium_set_modem_os` | p0f Android/iOS/Windows/etc fingerprint preset. |
 | `coronium_cancel_modem` | Cancel auto-renew (modem stays usable until current expiry). |
 | `coronium_get_openvpn_config` | Download `.ovpn` config (when supported by the modem). |
+| `coronium_get_proxy_health` | Per-modem liveness (`GET /account/proxies/health`) so agents stop retrying dead proxies. |
+| `coronium_get_p0f_options` | List valid OS-fingerprint (p0f) values for `coronium_set_modem_os` (`GET /modems/{id}/p0f-options`). |
+| `coronium_apply_modem_settings` | Apply pending modem settings (`POST /modems/{id}/apply-settings`). |
 
 ### Shop (7)
 
@@ -213,6 +223,21 @@ Talk to your AI: "list my Coronium proxies", "rotate the Polish one", "show my b
 | `coronium_create_ticket` | Open a new ticket. |
 | `coronium_reply_to_ticket` | Add a reply. |
 | `coronium_archive_ticket` | Close from the customer side. |
+
+### Pool (8)
+
+Pay-per-GB residential/mobile pool (Proxies.sx tier). These return a clear error / `503` when the pool tier is disabled on the deployment.
+
+| Tool | Description |
+|------|-------------|
+| `coronium_get_pool_stock` | Live pool country/stock availability. |
+| `coronium_list_pool_keys` | List your pool keys with usage. |
+| `coronium_build_pool_proxy_url` | Build a ready-to-use proxy URL for a pool key. |
+| `coronium_topup_pool_key` | Add GB / extend a pool key. |
+| `coronium_cancel_pool_key` | Disable a pool key. |
+| `coronium_buy_pool_with_balance` | Mint a new pool key using account credit. |
+| `coronium_list_pool_sessions` | List active pool sessions. |
+| `coronium_close_pool_session` | Close a pool session. |
 
 ## Environment
 
@@ -252,7 +277,7 @@ LOG_LEVEL=debug npm run dev
 
 ## Sibling project — wallet-bound MCP
 
-For agent-native onboarding (no email/password — wallet keypair + voucher), see [`@coronium/mcp`](https://www.npmjs.com/package/coronium-mcp) in the [`coronium-ai`](https://github.com/bolivian-peru/coronium-ai) monorepo. Tool surfaces are intentionally similar so an agent can substitute one for the other based on the user's auth model.
+For agent-native onboarding (no email/password — wallet keypair + voucher), see [`coronium-mcp`](https://www.npmjs.com/package/coronium-mcp) in the [`coronium-ai`](https://github.com/bolivian-peru/coronium-ai) monorepo. Tool surfaces are intentionally similar so an agent can substitute one for the other based on the user's auth model.
 
 ## Support
 

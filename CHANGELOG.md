@@ -136,9 +136,9 @@ end-to-end against current production API, codebase modularised.
 
 ### Sibling project
 - Wallet-bound + voucher-gated MCP for new agent-native signups lives at
-  [`@coronium/mcp`](https://www.npmjs.com/package/coronium-mcp) (in the
+  [`coronium-mcp`](https://www.npmjs.com/package/coronium-mcp) (in the
   [coronium-ai](https://github.com/bolivian-peru/coronium-ai) repo). This
-  package targets existing customers with email/password; `@coronium/mcp`
+  package targets existing customers with email/password; `coronium-mcp`
   targets new wallet-onboarded users. Tool surfaces overlap intentionally
   so an agent can substitute either.
 
