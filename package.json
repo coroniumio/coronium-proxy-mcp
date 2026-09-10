@@ -1,7 +1,7 @@
 {
   "name": "coronium-proxy-mcp",
-  "version": "1.3.0",
-  "description": "Model Context Protocol server for Coronium.io mobile (4G/5G) proxies — full lifecycle: list, rotate, replace, test, configure auto-rotation, manage subscriptions, check balances, open tickets.",
+  "version": "2.0.0",
+  "description": "Model Context Protocol server for Coronium.io mobile (4G/5G) proxies \u2014 full lifecycle: list, rotate, replace, test, configure auto-rotation, manage subscriptions, check balances, open tickets.",
   "private": false,
   "type": "module",
   "main": "dist/server.js",
@@ -9,12 +9,19 @@
     "coronium-proxy-mcp": "dist/server.js"
   },
   "scripts": {
-    "build": "tsc -p .",
+    "build": "npm run clean && tsc -p .",
     "start": "node dist/server.js",
     "dev": "tsx src/server.ts",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run check",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "check": "npm run typecheck && npm test",
+    "prepack": "npm run build",
+    "test:package": "node scripts/package-smoke.mjs",
+    "docs:generate": "node scripts/tool-catalog.mjs",
+    "docs:check": "node scripts/tool-catalog.mjs --check",
+    "test:public": "node scripts/public-smoke.mjs"
   },
   "keywords": [
     "mcp",
@@ -40,18 +47,18 @@
     "url": "https://github.com/coroniumio/coronium-proxy-mcp/issues"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.2.0",
-    "axios": "^1.7.7",
-    "zod": "^3.23.8",
-    "dotenv": "^16.4.5"
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "axios": "1.20.0",
+    "dotenv": "17.4.2",
+    "zod": "3.25.76"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.5.4",
-    "@types/node": "^20.0.0"
+    "typescript": "^5.5.4"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20"
   },
   "files": [
     "dist",
@@ -59,6 +66,9 @@
     "README.md",
     "LICENSE",
     ".env.example",
-    "tsconfig.json"
+    "tsconfig.json",
+    "CHANGELOG.md",
+    "llms.txt",
+    "docs"
   ]
 }

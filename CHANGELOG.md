@@ -1,9 +1,35 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## 2.0.0 — 2026-09-10
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Reconciles the public customer MCP with deployed backend contracts. The Coronium backend, reseller API and private support MCP are unchanged by this release.
+
+### Breaking migration changes
+
+- All 48 previous tool names remain; 11 tools are added. Results use structured `data`/`observed_at` envelopes, with JSON text for compatible clients. Do not parse old human-formatted lines.
+- Buy/renew operations require `confirm:true`, an 8–128-character `idempotency_key`, and use `funding_source: account_credit | btc` (default account credit). They send the real backend fields and preserve complete receipts. There are no automatic write retries.
+- Renewals use `modems:[{modem_id,days}]`, not a purchase tariff or plain ID list. The new renewal quote must include every requested modem.
+- Disruptive modem changes, cancellation, outbound support messages and webhook changes/tests require confirmation. `cancel_modem` means immediate release; the old end-of-term description was wrong. A new cancellation preview performs `dryRun:true`.
+- `rotate_modem` waits for the synchronous v3 route. Removed `wait_for_completion`, `max_wait_time` and `CORONIUM_ROTATION_URL`; no external reset service or substring polling. The replacement tool no longer accepts the ignored `same_country` parameter; the backend decides eligibility.
+- Rotation intervals are 0 or 60–86400 seconds. Password changes send `proxy_password` explicitly; omission generates a random password locally. OS settings are checked against the modem's actual options.
+- Pool top-up requires `tariff_id`; pool tariffs have their own discovery tool. Close-all requires `all_sessions:true` instead of an omitted session key. Saved configurations, carrier stock and supported targeting parameters are exposed. `state` is rejected because the deployed URL builder does not forward it.
+- Ticket creation uses `category` and `related_proxies`; the ignored `priority` argument is removed. Listing supports pending/resolved status, limit and offset.
+- `set_webhook` requires an explicit URL or null, plus confirmation. Omission no longer disables delivery accidentally.
+- Node 20 or newer is required. Dependencies are pinned to the verified release versions.
+
+### Correctness and security
+
+- USD credit comes from `accountCredit`; BTC and USDT remain separate native balances. Missing/failed data is an error. Removed speculative crypto USD totals and `CORONIUM_PRICES_URL`.
+- Owned proxy host resolution uses `connection_ip`/`ip_address`, credentials are URL-encoded, IPv6 is bracketed, countries are resolved from the real catalog, and capabilities/rotation tokens are preserved.
+- Environment API tokens and the API_KEY alias now work. Quiet dotenv keeps stdout valid JSON-RPC. Logout disables automatic re-login. Optional token persistence uses authenticated encryption and restricted permissions.
+- Read-only mode hides writes, including GET routes that initialize wallets or persist usage. It allows pure POST quotes and previews. There are no admin/farmer/credit override tools.
+- Ownership is checked before modem operations. HTTP 200 error bodies, rotated:false, malformed responses and ambiguous write failures are not reported as success. Error details retain reconciliation information while redacting credential fields.
+- A payment key is bound to one request within a process; concurrent identical calls share the result. Both successes and failures are retained for reconciliation. This does not promise exactly-once execution across process restarts.
+- Added guide resource, discovery/diagnosis prompts, capability information, MCP annotations, contract tests, package smoke test and CI.
+
+## Historical releases
+
+The entries below describe earlier versions; use the 2.0 migration notes for current behavior.
 
 ## [1.3.0] - 2026-05-27
 

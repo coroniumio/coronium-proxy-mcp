@@ -1,109 +1,114 @@
-// Pool Gateway tools — Proxies.sx pay-per-GB pool keys & sticky sessions.
-// These map to the /account/pool-* and /pool/* v3 endpoints, which return 503
-// when POOL_ENABLED is off on the deployment (surfaced as a clear error).
-
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {z} from "zod";
 import {api} from "../api-client.js";
-import {ok, err, unwrap} from "../formatters.js";
+import {CoroniumError} from "../errors.js";
+import {arrayResponse, finiteNumber, planName} from "../formatters.js";
+import {confirmation, countrySchema, idSchema, paymentFields, registerTool} from "../tool.js";
 
-export function registerPoolTools(server: McpServer) {
-    server.tool(
-        "coronium_get_pool_stock",
-        "Pool Gateway (pay-per-GB): live pool stock availability. Returns 503 if the pool tier is not enabled on this deployment.",
-        {},
-        async () => {
-            try { return ok(JSON.stringify(unwrap(await api.get("/pool/stock")), null, 2)); }
-            catch (e: any) { return err(e.message); }
-        }
-    );
+const shortString = z.string().min(1).max(64);
+const poolParameters = {
+    country: countrySchema.optional(), pool: z.enum(["mbl", "peer", "any", "best"]).default("any"),
+    rotation: z.enum(["auto5", "auto10", "auto20", "auto60", "ondemand", "sticky", "hard"]).optional(),
+    protocol: z.enum(["http", "socks5"]).default("http"), carrier: shortString.optional(), city: shortString.optional(), sid: shortString.optional(),
+    count: z.number().int().min(1).max(1000).default(1), sessionPrefix: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/).optional(),
+    sessionMode: z.enum(["unique", "same", "random"]).optional(),
+    failover: z.enum(["any", "samecountry", "samecarrier", "samenode", "strict"]).optional(),
+    ipType: z.enum(["mobile", "residential", "datacenter"]).optional(), asn: z.string().regex(/^\d{1,7}$/).optional(),
+    isp: shortString.optional(), ttl: z.number().int().min(60).max(2_592_000).optional(), strict: z.boolean().optional(),
+};
+type PoolParams = z.infer<z.ZodObject<typeof poolParameters>>;
+function validateParameters(params: PoolParams): void {
+    if (params.strict && !["sticky", "hard"].includes(params.rotation || "")) {
+        throw new CoroniumError({code: "invalid_pool_parameters", message: "strict:true requires rotation:sticky or rotation:hard."});
+    }
+}
 
-    server.tool(
-        "coronium_list_pool_keys",
-        "List my pay-per-GB pool keys (status, traffic remaining, tariff). Use coronium_build_pool_proxy_url to get a usable proxy URL for an active key.",
-        {},
-        async () => {
-            try {
-                const list = unwrap<any[]>(await api.get("/account/pool-keys"));
-                if (!Array.isArray(list) || list.length === 0) return ok("No pool keys.");
-                return ok(list.map((k: any) =>
-                    `  ${k._id || k.id} — status=${k.status} | tariff=${k.tariff_name || k.tariff_id || "?"} | gb_left=${k.traffic_remaining_gb ?? k.gb_remaining ?? "?"}`).join("\n"));
-            } catch (e: any) { return err(e.message); }
-        }
-    );
-
-    server.tool(
-        "coronium_build_pool_proxy_url",
-        "Build a usable proxy URL (or URLs) for an active pool key. Returns host gw.proxies.sx + credentials. Optional protocol (http|socks5), count, and country targeting.",
-        {
-            id: z.string().describe("Pool key id"),
-            protocol: z.enum(["http", "socks5"]).optional(),
-            count: z.number().int().positive().optional().describe("How many URLs to generate"),
-            country: z.string().optional().describe("ISO-2 country to target, if supported by the key"),
+export function registerPoolTools(server: McpServer): void {
+    registerTool(server, "coronium_list_pool_tariffs", {
+        description: "Discover current pay-per-GB plans from the existing public catalog. Returns only pool plan IDs, names, USD prices, traffic caps and duration; no modem tariffs or internal billing fields. Stock is a separate query.",
+        input: {},
+        run: async () => {
+            const tariffs = arrayResponse(await api.catalog(), "Public tariff catalog").filter(row => row.type === "pool" && row.deletedAt == null).map(row => ({
+                _id: String(row._id), name: planName(row.name), type: "pool", currency: "USD",
+                price: finiteNumber(row.price, "Pool price"), traffic_cap_gb: finiteNumber(row.traffic_cap_gb, "Pool traffic cap"),
+                duration_days: finiteNumber(row.duration_days, "Pool duration"), pool_kind: row.pool_kind ?? null,
+            }));
+            return {tariffs, count: tariffs.length};
         },
-        async ({id, protocol, count, country}) => {
-            try {
-                const body: any = {};
-                if (protocol) body.protocol = protocol;
-                if (count) body.count = count;
-                if (country) body.country = country;
-                return ok(JSON.stringify(unwrap(await api.post(`/account/pool-keys/${id}/proxy-url`, body)), null, 2));
-            } catch (e: any) { return err(e.message); }
-        }
-    );
-
-    server.tool(
-        "coronium_topup_pool_key",
-        "Top up (add traffic/credit to) an existing pool key.",
-        {id: z.string().describe("Pool key id")},
-        async ({id}) => {
-            try { return ok(JSON.stringify(unwrap(await api.post(`/account/pool-keys/${id}/topup`, {})), null, 2)); }
-            catch (e: any) { return err(e.message); }
-        }
-    );
-
-    server.tool(
-        "coronium_cancel_pool_key",
-        "Cancel a pool key.",
-        {id: z.string().describe("Pool key id")},
-        async ({id}) => {
-            try { return ok(JSON.stringify(unwrap(await api.post(`/account/pool-keys/${id}/cancel`, {})), null, 2)); }
-            catch (e: any) { return err(e.message); }
-        }
-    );
-
-    server.tool(
-        "coronium_buy_pool_with_balance",
-        "Buy a pay-per-GB pool key using account balance. Pass a pool tariff_id (from coronium_list_tariffs; pool tariffs have a traffic cap).",
-        {tariff_id: z.string().describe("A pool tariff id")},
-        async ({tariff_id}) => {
-            try { return ok(JSON.stringify(unwrap(await api.post("/payment/buy-pool-with-account-credit", {tariff_id})), null, 2)); }
-            catch (e: any) { return err(e.message); }
-        }
-    );
-
-    server.tool(
-        "coronium_list_pool_sessions",
-        "List my currently-open sticky pool sessions.",
-        {},
-        async () => {
-            try {
-                const list = unwrap<any[]>(await api.get("/account/pool/sessions"));
-                if (!Array.isArray(list) || list.length === 0) return ok("No open pool sessions.");
-                return ok(JSON.stringify(list, null, 2));
-            } catch (e: any) { return err(e.message); }
-        }
-    );
-
-    server.tool(
-        "coronium_close_pool_session",
-        "Close a pool session. Pass session_key to close one, or omit it to close ALL of my pool sessions.",
-        {session_key: z.string().optional().describe("Session key to close; omit to close all")},
-        async ({session_key}) => {
-            try {
-                const path = session_key ? `/account/pool/sessions/${encodeURIComponent(session_key)}` : "/account/pool/sessions";
-                return ok(JSON.stringify(unwrap(await api.del(path)), null, 2));
-            } catch (e: any) { return err(e.message); }
-        }
-    );
+    });
+    registerTool(server, "coronium_get_pool_stock", {
+        description: "Read pool country stock and any freshness/unavailability indicators. An unavailable upstream is not zero stock or a guarantee that a location is serviceable.",
+        input: {}, run: async () => ({response: await api.get("/pool/stock")}),
+    });
+    registerTool(server, "coronium_get_pool_carriers", {
+        description: "Read current pool carrier stock for a two-letter country code.",
+        input: {country: countrySchema}, run: async ({country}) => ({response: await api.get(`/pool/stock/carriers/${country.toLowerCase()}`)}),
+    });
+    registerTool(server, "coronium_list_pool_keys", {
+        description: "List owned pool keys with cap, used traffic, computed remaining GB, expiry and usage freshness. This backend GET may refresh usage in the database and is excluded from strict read-only mode. Remaining traffic is a snapshot, not a live metering guarantee.",
+        input: {}, access: "write",
+        run: async () => {
+            const keys = arrayResponse(await api.get("/account/pool-keys", undefined, {mutates: true}), "Pool keys").map(key => {
+                const cap = finiteNumber(key.traffic_cap_gb, "Pool cap");
+                const used = finiteNumber(key.traffic_used_gb, "Pool usage");
+                return {...key, traffic_remaining_gb: Math.max(0, cap - used)};
+            });
+            return {keys, count: keys.length};
+        },
+    });
+    registerTool(server, "coronium_build_pool_proxy_url", {
+        description: "Build credential-bearing URLs for an active owned pool key. Supports protocol, country/carrier/city, session mode, failover and targeting. Building does not prove a connection works. state targeting is intentionally absent because the deployed builder ignores it. Do not expose URLs publicly.",
+        input: {id: idSchema, ...poolParameters}, access: "write",
+        run: async ({id, ...params}) => { validateParameters(params); return {response: await api.post(`/account/pool-keys/${id}/proxy-url`, params)}; },
+    });
+    registerTool(server, "coronium_buy_pool_with_balance", {
+        description: "Buy a pay-per-GB pool key using USD account credit. Select a current ID from list_pool_tariffs and obtain price authorization first. Preserve the idempotency key and complete backend receipt.",
+        input: {tariff_id: idSchema, ...paymentFields}, access: "write",
+        run: async ({tariff_id, idempotency_key}) => ({funding_source: "account_credit", ...await api.payment("/payment/buy-pool-with-account-credit", {tariff_id}, idempotency_key)}),
+    });
+    registerTool(server, "coronium_topup_pool_key", {
+        description: "Spend USD account credit to top up an owned pool key with the selected pool tariff. tariff_id is required by the backend. Obtain authorization for the selected plan price and retain the idempotency key.",
+        input: {id: idSchema, tariff_id: idSchema, ...paymentFields}, access: "write",
+        run: async ({id, tariff_id, idempotency_key}) => ({funding_source: "account_credit", ...await api.payment(`/account/pool-keys/${id}/topup`, {tariff_id}, idempotency_key)}),
+    });
+    registerTool(server, "coronium_cancel_pool_key", {
+        description: "Cancel an owned pool key immediately and apply the backend's unused-traffic refund policy. URLs using this key stop working. Requires explicit authorization for cancellation and a stable idempotency key.",
+        input: {id: idSchema, ...paymentFields, confirm: confirmation}, access: "write", destructive: true,
+        run: async ({id, idempotency_key}) => api.payment(`/account/pool-keys/${id}/cancel`, {}, idempotency_key),
+    });
+    registerTool(server, "coronium_list_pool_sessions", {
+        description: "Read active pool sessions visible to this account, preserving backend scope and freshness metadata. Sessions without a user-scoped ID may not be visible.",
+        input: {}, run: async () => ({response: await api.get("/account/pool/sessions")}),
+    });
+    registerTool(server, "coronium_close_pool_session", {
+        description: "Close one exact pool session, or explicitly set all_sessions:true to close all sessions visible to this account. This disrupts active connections. Omitting both selectors is rejected.",
+        input: {session_key: z.string().min(1).max(256).optional(), all_sessions: z.literal(true).optional(), confirm: confirmation}, access: "write", destructive: true,
+        run: async ({session_key, all_sessions}) => {
+            if (Boolean(session_key) === Boolean(all_sessions)) throw new CoroniumError({code: "session_selector_required", message: "Provide exactly one of session_key or all_sessions:true."});
+            const path = session_key ? `/account/pool/sessions/${encodeURIComponent(session_key)}` : "/account/pool/sessions";
+            return {response: await api.del(path)};
+        },
+    });
+    registerTool(server, "coronium_list_saved_pool_sessions", {
+        description: "Read this account's saved pool URL configurations. These are recipes, not necessarily active connections.",
+        input: {}, run: async () => ({response: await api.get("/account/pool/saved")}),
+    });
+    registerTool(server, "coronium_save_pool_session", {
+        description: "Create or update an owned pool configuration by key and label. Uses the same validated URL parameters as the pool builder; does not purchase traffic.",
+        input: {pool_key_id: idSchema, label: shortString, params: z.object(poolParameters).strict()}, access: "write", idempotent: true,
+        run: async ({pool_key_id, label, params}) => {
+            validateParameters(params);
+            return {response: await api.post("/account/pool/saved", {poolKeyId: pool_key_id, label, params})};
+        },
+    });
+    registerTool(server, "coronium_delete_saved_pool_session", {
+        description: "Delete one saved pool configuration. This deletes the recipe; closing an active connection is a separate action.",
+        input: {id: idSchema, confirm: confirmation}, access: "write", destructive: true, idempotent: true,
+        run: async ({id}) => ({response: await api.del(`/account/pool/saved/${id}`)}),
+    });
+    registerTool(server, "coronium_build_saved_pool_session_url", {
+        description: "Build credential-bearing URLs from an owned saved configuration. The backend updates last_used_at. No connectivity test or traffic purchase is performed.",
+        input: {id: idSchema}, access: "write",
+        run: async ({id}) => ({response: await api.post(`/account/pool/saved/${id}/url`)}),
+    });
 }

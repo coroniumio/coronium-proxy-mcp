@@ -1,65 +1,41 @@
-// Shared output formatters for tool results. Keeping these in one place
-// keeps the wire format consistent across tools — agents and humans both
-// see the same headings, the same field ordering, the same error markers.
+import {invalidResponse} from "./errors.js";
+import type {ApiObject} from "./api-client.js";
 
-// Public v3 endpoints (countries, tariffs, free-modems) wrap arrays as
-// {data: [...]}; v1 endpoints return raw arrays/objects. This unwraps
-// either shape so tools can iterate uniformly.
-export function unwrap<T = any>(r: any): T {
-    if (r && typeof r === "object" && Array.isArray(r.data)) return r.data as T;
-    if (r && typeof r === "object" && r.data && !Array.isArray(r) && typeof r.data === "object") return r.data as T;
-    return r as T;
+export function unwrap(value: any): any {
+    return value && typeof value === "object" && "data" in value ? value.data : value;
 }
 
-export function ok(text: string) {
-    return {content: [{type: "text" as const, text}]};
+export function arrayResponse(value: unknown, label: string): ApiObject[] {
+    const rows = unwrap(value);
+    if (!Array.isArray(rows) || rows.some(row => !row || typeof row !== "object" || Array.isArray(row))) invalidResponse(`${label} did not return an array of objects.`);
+    return rows;
 }
 
-export function err(text: string) {
-    return {content: [{type: "text" as const, text: `❌ ${text}`}], isError: true};
+export function finiteNumber(value: unknown, label: string): number {
+    if ((typeof value !== "number" && typeof value !== "string") || (typeof value === "string" && !value.trim()) || !Number.isFinite(Number(value))) invalidResponse(`${label} is unavailable; it must not be treated as zero.`);
+    return Number(value);
 }
 
-export function maskUrl(url: string | undefined): string {
-    if (!url) return "";
-    return url.replace(/https?:\/\/[^\/]+/g, "https://***");
+export function proxyUrl(protocol: "http" | "socks5", host: string | null, port: unknown, login: unknown, password: unknown): string | null {
+    if (!host || !port || login == null || password == null) return null;
+    const number = Number(port);
+    if (!Number.isInteger(number) || number < 1 || number > 65535 || /[\s/@?#]/.test(host)) return null;
+    const address = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+    return `${protocol}://${encodeURIComponent(String(login))}:${encodeURIComponent(String(password))}@${address}:${number}`;
 }
 
-export function formatProxyLine(p: any): string {
-    const exp = p.tariff_expired_at || p.expires_at;
-    const expIso = exp ? new Date(exp).toISOString() : "n/a";
-    const ip = p.ipIProxyServer || p.host || "?";
-    const httpPort = p.http_port || "?";
-    const socksPort = p.socks_port || "?";
-    const country = p.country?.country_code || p.country?.code || p.country_code || "?";
-    return `  ${p.name || p.portId || "?"} (${p._id || "?"})\n` +
-        `    country=${country} | http=${ip}:${httpPort} | socks=${ip}:${socksPort}\n` +
-        `    login=${p.proxy_login || "?"} | expires=${expIso}`;
+export function normalizeProxy(proxy: ApiObject, countries: ApiObject[] = []): ApiObject {
+    const country = countries.find(item => String(item._id) === String(proxy.country_id));
+    const host = proxy.connection_ip || proxy.ip_address || proxy.ipIProxyServer || proxy.host || null;
+    return {...proxy, host, country_code: proxy.country_code || proxy.country?.country_code || country?.country_code || null,
+        restartToken: proxy.restartToken || null,
+        http_url: proxyUrl("http", host, proxy.http_port, proxy.proxy_login, proxy.proxy_password),
+        socks5_url: proxyUrl("socks5", host, proxy.socks_port, proxy.proxy_login, proxy.proxy_password),
+        connection_verified_by_this_tool: false};
 }
 
-export function formatProxyDetail(p: any): string {
-    const ip = p.ipIProxyServer || p.host || "?";
-    const expIso = p.tariff_expired_at ? new Date(p.tariff_expired_at).toISOString() : (p.expires_at || "n/a");
-    return [
-        `proxy_id:        ${p._id}`,
-        `name:            ${p.name || p.portId}`,
-        `port_id:         ${p.portId || "—"}`,
-        `host:            ${ip}`,
-        `http_port:       ${p.http_port}`,
-        `socks_port:      ${p.socks_port}`,
-        `proxy_login:     ${p.proxy_login}`,
-        `proxy_password:  ${p.proxy_password}`,
-        `country:         ${p.country?.country_code || p.country_code || "?"}`,
-        `external_ip:     ${p.ext_ip || "?"}`,
-        `expires_at:      ${expIso}`,
-        `auto_rotate_s:   ${p.rotation_interval ?? 0}`,
-        `status:          ${p.status || "?"}`,
-        `is_online:       ${p.isOnline}`,
-    ].join("\n");
-}
-
-export function formatTimestamp(ms: number | string | undefined): string {
-    if (!ms) return "n/a";
-    const n = typeof ms === "string" ? Date.parse(ms) : ms;
-    if (!Number.isFinite(n)) return "n/a";
-    return new Date(n).toISOString();
+export function planName(name: unknown): string | null {
+    if (typeof name === "string") return name;
+    if (name && typeof name === "object" && "en" in name && typeof name.en === "string") return name.en;
+    return null;
 }

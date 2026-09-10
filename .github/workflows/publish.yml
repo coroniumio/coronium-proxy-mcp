@@ -3,22 +3,39 @@ on:
   workflow_dispatch:
   push:
     tags: ['publish-v*']
-  release:
-    types: [published]
 permissions:
   contents: read
-  id-token: write   # required for npm Trusted Publishing (OIDC, tokenless)
+  id-token: write
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
 jobs:
   publish:
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-      - run: npm install -g npm@latest   # trusted publishing needs npm >= 11.5
-      - run: npm ci || npm install
-      - run: npm publish --provenance --access public
+          cache: npm
+      - name: Verify release version and branch
+        shell: bash
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            test "$GITHUB_REF_NAME" = "publish-v$(node -p 'require("./package.json").version')"
+          fi
+      - run: npm ci
+      - run: npm run check
+      - run: npm run docs:check
+      - run: npm run test:package
+      - name: Publish with provenance
+        run: npm publish --provenance --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}   # used only if a token secret exists; trusted publishing ignores it
+          # npm 11.5.1+ / Node 22.14+ support trusted publishing. Node 24
+          # supplies both; an existing repository token remains a fallback.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,104 +1,64 @@
-// Encrypted at-rest token storage at ~/.coronium/token.enc.
-//
-// AES-256-CBC with a scrypt-derived key. The encryption key comes from
-// TOKEN_ENCRYPTION_KEY env var, or is auto-generated as a 32-byte random
-// hex string per process. Auto-generation means the cache is per-machine
-// and lost on restart unless TOKEN_ENCRYPTION_KEY is pinned — that's
-// acceptable since auto-login (CORONIUM_LOGIN/PASSWORD) re-mints fresh
-// tokens transparently.
-
-import crypto from "crypto";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {config} from "./config.js";
-import {logger} from "./logger.js";
 
-const ALGO = "aes-256-cbc";
-const CONFIG_DIR = path.join(os.homedir(), ".coronium");
-const TOKEN_PATH = path.join(CONFIG_DIR, "token.enc");
-const CRYPTO_ADDRS_PATH = path.join(CONFIG_DIR, "crypto_addresses.json");
-
+// Environment tokens stay in memory. Login tokens persist only with an explicitly
+// configured encryption key; a random per-process key cannot protect a reusable cache.
 class TokenStore {
     private token?: string;
-    private cryptoAddresses?: Array<{coin: string, address: string, balance?: number}>;
+    private readonly directory = path.join(os.homedir(), ".coronium");
+    private readonly file = path.join(this.directory, "token.enc");
 
     constructor() {
-        if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, {recursive: true});
-        this.load();
-        this.loadCryptoAddresses();
-    }
-
-    private encrypt(text: string): string {
-        const key = crypto.scryptSync(config.tokenEncryptionKey, "salt", 32);
-        const iv = crypto.randomBytes(16);
-        const cipher = crypto.createCipheriv(ALGO, key, iv);
-        const enc = cipher.update(text, "utf8", "hex") + cipher.final("hex");
-        return iv.toString("hex") + ":" + enc;
-    }
-
-    private decrypt(text: string): string | null {
-        try {
-            const key = crypto.scryptSync(config.tokenEncryptionKey, "salt", 32);
-            const [ivHex, encHex] = text.split(":");
-            if (!ivHex || !encHex) return null;
-            const decipher = crypto.createDecipheriv(ALGO, key, Buffer.from(ivHex, "hex"));
-            return decipher.update(encHex, "hex", "utf8") + decipher.final("utf8");
-        } catch {
-            return null;
-        }
+        this.token = config.apiToken || this.load();
     }
 
     get(): string | undefined { return this.token; }
 
     set(token: string): void {
         this.token = token;
+        if (!config.tokenEncryptionKey) return;
+        const iv = crypto.randomBytes(12);
+        const cipher = crypto.createCipheriv("aes-256-gcm", this.key(), iv);
+        const ciphertext = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
+        const encoded = ["gcm", iv.toString("hex"), cipher.getAuthTag().toString("hex"), ciphertext.toString("hex")].join(":");
+        fs.mkdirSync(this.directory, {recursive: true, mode: 0o700});
+        fs.chmodSync(this.directory, 0o700);
+        const temporary = this.file + "." + crypto.randomUUID();
         try {
-            fs.writeFileSync(TOKEN_PATH, this.encrypt(token), "utf8");
-            logger.debug("Token stored");
-        } catch (e) {
-            logger.error("Failed to persist token:", e);
+            fs.writeFileSync(temporary, encoded, {mode: 0o600, flag: "wx"});
+            fs.renameSync(temporary, this.file);
+        } finally {
+            fs.rmSync(temporary, {force: true});
         }
     }
 
     clear(): void {
         this.token = undefined;
-        try {
-            if (fs.existsSync(TOKEN_PATH)) fs.unlinkSync(TOKEN_PATH);
-        } catch (e) {
-            logger.debug("Token clear noop:", e);
-        }
+        fs.rmSync(this.file, {force: true});
     }
 
-    private load(): void {
-        if (!fs.existsSync(TOKEN_PATH)) return;
+    private key(): Buffer {
+        return crypto.scryptSync(config.tokenEncryptionKey!, "salt", 32);
+    }
+
+    private load(): string | undefined {
+        if (!config.tokenEncryptionKey || !fs.existsSync(this.file)) return undefined;
         try {
-            const enc = fs.readFileSync(TOKEN_PATH, "utf8");
-            if (enc) {
-                const dec = this.decrypt(enc);
-                if (dec) this.token = dec;
+            const parts = fs.readFileSync(this.file, "utf8").split(":");
+            if (parts[0] === "gcm") {
+                const decipher = crypto.createDecipheriv("aes-256-gcm", this.key(), Buffer.from(parts[1], "hex"));
+                decipher.setAuthTag(Buffer.from(parts[2], "hex"));
+                return decipher.update(parts[3], "hex", "utf8") + decipher.final("utf8");
             }
+            // Read a pinned-key v1 cache; the next explicit login writes GCM.
+            const decipher = crypto.createDecipheriv("aes-256-cbc", this.key(), Buffer.from(parts[0], "hex"));
+            return decipher.update(parts[1], "hex", "utf8") + decipher.final("utf8");
         } catch {
-            // unreadable cache — fine, next call will re-mint
+            return undefined;
         }
-    }
-
-    getCryptoAddresses() { return this.cryptoAddresses; }
-
-    saveCryptoAddresses(addresses: Array<{coin: string, address: string, balance?: number}>): void {
-        this.cryptoAddresses = addresses;
-        try {
-            fs.writeFileSync(CRYPTO_ADDRS_PATH, JSON.stringify(addresses, null, 2));
-        } catch (e) {
-            logger.error("Failed to save crypto addresses:", e);
-        }
-    }
-
-    private loadCryptoAddresses(): void {
-        if (!fs.existsSync(CRYPTO_ADDRS_PATH)) return;
-        try {
-            this.cryptoAddresses = JSON.parse(fs.readFileSync(CRYPTO_ADDRS_PATH, "utf8"));
-        } catch {/* ignore */}
     }
 }
 

@@ -1,149 +1,166 @@
-// Axios wrapper around api.coronium.io/api/v3.
-//
-// Two notable behaviours on top of plain axios:
-//
-//   1. Every authenticated request appends ?auth_token=<token>. The
-//      backend accepts the token via query param OR Authorization
-//      header; query param matches the prior version's pattern exactly
-//      so users with cached tokens keep working.
-//
-//   2. On a 401 from any authenticated call, if CORONIUM_LOGIN /
-//      CORONIUM_PASSWORD are present and auto-login is not disabled
-//      (CORONIUM_AUTO_LOGIN=0), we transparently re-mint a token and
-//      retry once. Day-to-day use feels tokenless — agents don't have
-//      to handle expiry manually.
-//
-// Concurrency note: a single in-flight login promise is shared so a
-// burst of parallel calls all wait on the same auth round-trip rather
-// than each minting their own token.
-
-import axios, {AxiosInstance, AxiosRequestConfig} from "axios";
+import axios from "axios";
+import {createHash} from "node:crypto";
 import {config} from "./config.js";
-import {logger} from "./logger.js";
+import {CoroniumError, invalidResponse, redact} from "./errors.js";
 import {tokenStore} from "./token-store.js";
 
-export class CoroniumAPI {
-    private client: AxiosInstance;
-    private inFlightLogin: Promise<string> | null = null;
+export type ApiObject = Record<string, any>;
+interface RequestOptions {
+    method?: "GET" | "POST" | "PUT" | "DELETE";
+    body?: unknown;
+    query?: Record<string, unknown>;
+    public?: boolean;
+    token?: string;
+    readOnly?: boolean;
+    mutates?: boolean;
+    text?: boolean;
+    timeoutMs?: number;
+    idempotencyKey?: string;
+    receipt?: boolean;
+    catalog?: boolean;
+}
 
-    constructor() {
-        this.client = axios.create({
-            baseURL: config.baseUrl,
-            timeout: 30_000,
-            headers: {"Content-Type": "application/json"},
-        });
+function isAuthFailure(status: number | undefined, body: ApiObject): boolean {
+    return status === 401 && !('required' in body || 'available' in body)
+        && /no auth token|unauthori[sz]ed|jwt expired|invalid (?:auth )?token|not authenticated/i.test(body.error || body.message || "");
+}
+
+export class CoroniumAPI {
+    private inFlightLogin: Promise<string> | null = null;
+    private autoLoginDisabled = false;
+    private paymentIntents = new Map<string, {fingerprint: string; result: Promise<ApiObject>}>();
+
+    async login(login: string, password: string): Promise<void> {
+        const body = await this.request("/get-token", {method: "POST", body: {login, password}, public: true, readOnly: true});
+        if (typeof body?.token !== "string" || !body.token) invalidResponse("Login returned no token.");
+        tokenStore.set(body.token);
+        this.autoLoginDisabled = false;
     }
 
-    // ---------- Auth ----------
+    logout(): void {
+        tokenStore.clear();
+        this.autoLoginDisabled = true;
+    }
 
-    /**
-     * POST /get-token — exchange email+password for a JWT.
-     */
-    async login(login: string, password: string): Promise<string> {
+    async validateToken(token?: string): Promise<boolean> {
+        const value = token || tokenStore.get();
+        if (!value) return false;
         try {
-            const r = await this.client.post("/get-token", {login, password});
-            const token = r.data?.token;
-            if (!token) throw new Error("Login succeeded but server did not return a token.");
-            tokenStore.set(token);
-            return token;
-        } catch (e: any) {
-            if (axios.isAxiosError(e)) {
-                const s = e.response?.status;
-                const m = e.response?.data?.error || e.response?.data?.message || e.message;
-                if (s === 401) throw new Error("Invalid credentials. Check CORONIUM_LOGIN and CORONIUM_PASSWORD.");
-                if (s === 429) throw new Error("Rate limited by login endpoint. Wait a minute and retry.");
-                if (s) throw new Error(`Login failed (${s}): ${m}`);
-            }
-            throw e;
+            await this.request("/account", {token: value});
+            return true;
+        } catch (error) {
+            if (error instanceof CoroniumError && [401, 403].includes(error.details.status || 0)) return false;
+            throw error;
         }
     }
 
-    private async loginShared(): Promise<string> {
-        if (this.inFlightLogin) return this.inFlightLogin;
-        if (!config.login || !config.password) throw new Error("CORONIUM_LOGIN and CORONIUM_PASSWORD must be set for auto-login.");
-        this.inFlightLogin = this.login(config.login, config.password)
-            .finally(() => { this.inFlightLogin = null; });
+    private async authenticate(): Promise<string> {
+        if (tokenStore.get()) return tokenStore.get()!;
+        if (!config.autoLoginOn401 || this.autoLoginDisabled || !config.login || !config.password) {
+            throw new CoroniumError({code: "not_authenticated", message: "Set CORONIUM_API_TOKEN (or CORONIUM_API_KEY), or log in with CORONIUM_LOGIN/CORONIUM_PASSWORD.", suggested_action: "authenticate"});
+        }
+        if (!this.inFlightLogin) {
+            this.inFlightLogin = this.login(config.login, config.password).then(() => tokenStore.get()!).finally(() => { this.inFlightLogin = null; });
+        }
         return this.inFlightLogin;
     }
 
-    /**
-     * Quick token validity probe. /account/proxies is cheap and requires
-     * a valid token; 200 = good, 401 = bad.
-     */
-    async validateToken(token: string): Promise<boolean> {
-        try {
-            await this.client.get("/account/proxies", {params: {auth_token: token}});
-            return true;
-        } catch (e: any) {
-            if (axios.isAxiosError(e) && (e.response?.status === 401 || e.response?.status === 403)) return false;
-            throw e;
-        }
-    }
-
-    // ---------- Authenticated request helpers ----------
-
-    private async tokenOrThrow(explicit?: string): Promise<string> {
-        const t = explicit || tokenStore.get();
-        if (t) return t;
-        if (config.autoLoginOn401 && config.login && config.password) {
-            logger.info("No cached token — auto-logging in.");
-            return await this.loginShared();
-        }
-        throw new Error("Not authenticated. Call coronium_login first or set CORONIUM_LOGIN/CORONIUM_PASSWORD.");
-    }
-
-    private async authedRequest<T = any>(cfg: AxiosRequestConfig, explicitToken?: string): Promise<T> {
-        let token = await this.tokenOrThrow(explicitToken);
-        const params = {...(cfg.params || {}), auth_token: token};
-        try {
-            const r = await this.client.request<T>({...cfg, params});
-            return r.data;
-        } catch (e: any) {
-            if (axios.isAxiosError(e) && e.response?.status === 401 && !explicitToken && config.autoLoginOn401 && config.login && config.password) {
-                logger.warn("401 — refreshing token via auto-login and retrying once.");
-                tokenStore.clear();
-                token = await this.loginShared();
-                const r = await this.client.request<T>({...cfg, params: {...(cfg.params || {}), auth_token: token}});
-                return r.data;
+    async request(path: string, options: RequestOptions = {}): Promise<any> {
+        const method = options.method || "GET";
+        const mutates = options.mutates ?? (method !== "GET" && !options.readOnly);
+        if (config.readOnly && mutates) throw new CoroniumError({code: "read_only", message: "This MCP is configured for read-only access."});
+        // Paths are code-owned; dynamic segments must be URL-encoded by callers.
+        if (!path.startsWith("/") || path.startsWith("//") || path.includes("..")) throw new Error("Invalid API path.");
+        const url = options.catalog ? config.catalogUrl : config.baseUrl + path;
+        let token = options.public ? undefined : (options.token || await this.authenticate());
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                const response = await axios.request({
+                    method, url, params: options.query, data: options.body,
+                    headers: {Accept: options.text ? "text/plain, application/octet-stream" : "application/json",
+                        ...(token ? {Authorization: `Bearer ${token}`} : {}),
+                        ...(options.body !== undefined ? {"Content-Type": "application/json"} : {}),
+                        ...(options.idempotencyKey ? {"Idempotency-Key": options.idempotencyKey} : {})},
+                    timeout: options.timeoutMs ?? config.timeoutMs,
+                    maxRedirects: 0,
+                    responseType: "text",
+                    validateStatus: () => true,
+                });
+                let body: any;
+                try { body = response.data ? JSON.parse(response.data) : null; }
+                catch {
+                    if (options.text && response.status >= 200 && response.status < 300 && !/^\s*(?:<!doctype\s+html|<html|<head|<body)\b/i.test(response.data)) body = response.data;
+                    else body = null;
+                }
+                if (response.status >= 200 && response.status < 300) {
+                    if (body === null && response.status !== 204) throw new CoroniumError({code: "invalid_response",
+                        message: "API returned an empty or non-JSON response instead of the expected contract.",
+                        ...(mutates ? {outcome: "unknown" as const, suggested_action: "check_state_before_retrying"} : {suggested_action: "contact_support"}),
+                        ...(options.idempotencyKey ? {idempotency_key: options.idempotencyKey} : {})});
+                    // Some legacy handlers report refusal as HTTP 200 with an
+                    // error string (for example, an existing pending BTC payment).
+                    if (body && typeof body.error === "string" && body.error) throw new CoroniumError({status: response.status,
+                        code: body.code || "upstream_rejected", message: body.error, details: redact(body),
+                        request_id: body.request_id || response.headers['x-request-id'],
+                        ...(mutates ? {outcome: "unknown" as const, suggested_action: "check_state_before_retrying"} : {}),
+                        ...(options.idempotencyKey ? {idempotency_key: options.idempotencyKey} : {})});
+                    if (options.receipt) return {response: body, request: {idempotency_key: options.idempotencyKey,
+                        request_id: response.headers['x-request-id'] ?? null, replayed: response.headers['x-idempotency-replay'] === 'true'}};
+                    return body;
+                }
+                const errorBody: ApiObject = body && typeof body === "object" ? body : {};
+                // Never replay a mutation, including a money request that returns 401 for insufficient BTC.
+                if (attempt === 0 && !mutates && method === "GET" && !options.token && !options.public
+                    && token !== config.apiToken && config.autoLoginOn401 && !this.autoLoginDisabled
+                    && config.login && config.password && isAuthFailure(response.status, errorBody)) {
+                    tokenStore.clear();
+                    token = await this.authenticate();
+                    continue;
+                }
+                const retryValue = response.headers['retry-after'] ?? errorBody.retryAfter;
+                const retryAfter = retryValue === undefined ? NaN : /^\d+(\.\d+)?$/.test(String(retryValue))
+                    ? Number(retryValue) : Math.max(0, Math.ceil((Date.parse(String(retryValue)) - Date.now()) / 1000));
+                throw new CoroniumError({status: response.status, code: errorBody.code || `http_${response.status}`,
+                    message: String(errorBody.error || errorBody.message || `Coronium returned HTTP ${response.status}.`),
+                    request_id: errorBody.request_id || errorBody.requestId || response.headers['x-request-id'],
+                    suggested_action: mutates && response.status >= 500 ? "check_state_before_retrying" : errorBody.suggested_action,
+                    ...(Number.isFinite(retryAfter) && retryAfter >= 0 ? {retry_after_seconds: retryAfter} : {}),
+                    ...(options.idempotencyKey ? {idempotency_key: options.idempotencyKey} : {}),
+                    ...(mutates && response.status >= 500 ? {outcome: "unknown" as const} : {}), details: redact(errorBody)});
+            } catch (error) {
+                if (error instanceof CoroniumError) throw error;
+                throw new CoroniumError({code: axios.isAxiosError(error) ? (error.code || "network_error") : "request_failed",
+                    message: "Coronium request did not complete. No automatic retry was made.",
+                    ...(mutates ? {outcome: "unknown" as const, suggested_action: "check_state_before_retrying"} : {}),
+                    ...(options.idempotencyKey ? {idempotency_key: options.idempotencyKey} : {})});
             }
-            throw this.translateError(e, cfg);
         }
+        throw new Error("Authentication refresh failed.");
     }
 
-    private translateError(e: any, cfg: AxiosRequestConfig): Error {
-        if (!axios.isAxiosError(e)) return e;
-        const status = e.response?.status;
-        const data = e.response?.data || {};
-        const msg = data.error || data.message || e.message;
-        const where = `${(cfg.method || "GET").toUpperCase()} ${cfg.url}`;
-        if (status === 401) return new Error(`Unauthorized (${where}). Token expired or invalid.`);
-        if (status === 402) return new Error(`Payment required (${where}): ${msg}`);
-        if (status === 403) return new Error(`Forbidden (${where}): ${msg}`);
-        if (status === 404) return new Error(`Not found (${where}): ${msg}`);
-        if (status === 422) return new Error(`Validation failed (${where}): ${msg}`);
-        if (status === 429) return new Error(`Rate limited (${where}): ${msg}`);
-        if (status && status >= 500) return new Error(`Server error ${status} (${where}): ${msg}`);
-        return new Error(`${where} failed: ${msg}`);
-    }
-
-    // ---------- Public route methods ----------
-
-    public get<T = any>(url: string, params?: any, token?: string)               { return this.authedRequest<T>({method: "GET", url, params}, token); }
-    public post<T = any>(url: string, data?: any, params?: any, token?: string)  { return this.authedRequest<T>({method: "POST", url, data, params}, token); }
-    public put<T = any>(url: string, data?: any, params?: any, token?: string)   { return this.authedRequest<T>({method: "PUT", url, data, params}, token); }
-    public del<T = any>(url: string, params?: any, token?: string)               { return this.authedRequest<T>({method: "DELETE", url, params}, token); }
-
-    /**
-     * Public routes (signup/check-token/tariffs/free-modems/countries)
-     * don't require auth — call directly without injecting a token.
-     */
-    public async pub<T = any>(method: "GET"|"POST", url: string, data?: any, params?: any): Promise<T> {
-        try {
-            const r = await this.client.request<T>({method, url, data, params});
-            return r.data;
-        } catch (e: any) {
-            throw this.translateError(e, {method, url});
+    get(path: string, query?: Record<string, unknown>, options: RequestOptions = {}): Promise<any> { return this.request(path, {...options, query}); }
+    post(path: string, body: unknown = {}, options: RequestOptions = {}): Promise<any> { return this.request(path, {...options, method: "POST", body}); }
+    put(path: string, body: unknown = {}): Promise<any> { return this.request(path, {method: "PUT", body}); }
+    del(path: string, options: RequestOptions = {}): Promise<any> { return this.request(path, {...options, method: "DELETE"}); }
+    publicGet(path: string, query?: Record<string, unknown>): Promise<any> { return this.request(path, {query, public: true}); }
+    catalog(): Promise<any> { return this.request("/tariffs", {public: true, catalog: true}); }
+    async payment(path: string, body: unknown, idempotencyKey: string): Promise<ApiObject> {
+        const token = await this.authenticate();
+        const accountScope = createHash("sha256").update(token).digest("hex");
+        const intentKey = `${accountScope}:${idempotencyKey}`;
+        const fingerprint = createHash("sha256").update(JSON.stringify({path, body})).digest("hex");
+        const previous = this.paymentIntents.get(intentKey);
+        if (previous) {
+            if (previous.fingerprint !== fingerprint) throw new CoroniumError({code: "idempotency_conflict",
+                message: "This key already identifies a different payment request in this session. Do not change a payment's payload or route while reconciling it.", idempotency_key: idempotencyKey});
+            return previous.result;
         }
+        if (this.paymentIntents.size >= 10_000) throw new CoroniumError({code: "session_intent_limit", message: "Restart the MCP after reconciling outstanding payments; the session intent limit was reached."});
+        // Coalesce concurrent identical calls. Keep both successes and failures:
+        // an ambiguous payment must be reconciled, never automatically resubmitted.
+        const result = this.post(path, body, {token, idempotencyKey, receipt: true, timeoutMs: config.actionTimeoutMs});
+        this.paymentIntents.set(intentKey, {fingerprint, result});
+        return result;
     }
 }
 

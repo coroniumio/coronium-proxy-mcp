@@ -1,156 +1,100 @@
-// Shop tools — browse stock, list tariffs, validate coupons, buy and
-// renew. Buying defaults to crypto balance; we expose card-based checkout
-// indirectly (the customer can call coronium_get_credit_cards and use the
-// frontend if the card flow is preferred — Stripe-saved-card endpoints
-// require additional 3DS state we don't replicate in MCP).
-
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {z} from "zod";
-import {api} from "../api-client.js";
-import {ok, err, unwrap} from "../formatters.js";
+import {api, type ApiObject} from "../api-client.js";
+import {CoroniumError, invalidResponse} from "../errors.js";
+import {arrayResponse} from "../formatters.js";
+import {countrySchema, idSchema, paymentFields, registerTool} from "../tool.js";
 
-export function registerShopTools(server: McpServer) {
-    server.tool(
-        "coronium_list_countries",
-        "List countries that have stock available. Returns ISO-2 + display name + count of free modems.",
-        {},
-        async () => {
-            try {
-                const data = unwrap<any[]>(await api.pub("GET", "/countries"));
-                if (!Array.isArray(data) || data.length === 0) return ok("No countries returned.");
-                return ok(data.map((c: any) => `  ${c.country_code || c.code} — ${c.name}${c.free_count != null ? ` (${c.free_count} free)` : ""}`).join("\n"));
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
+const couponField = z.string().min(1).max(128).optional();
+const fundingSource = z.enum(["account_credit", "btc"]).default("account_credit").describe("Choose explicitly: USD account credit or native BTC. USDT and cards are not supported by these MCP checkout tools.");
+const renewalFields = {
+    modems: z.array(z.object({modem_id: idSchema, days: z.number().int().min(1).max(90)}).strict()).min(1).max(100)
+        .refine(rows => new Set(rows.map(row => row.modem_id)).size === rows.length, "Each modem must appear only once."),
+    coupon: couponField,
+};
 
-    server.tool(
-        "coronium_list_tariffs",
-        "List available tariffs (price plans). Each entry has duration, price, supported countries, included GB. Use coronium_check_coupon before buying for coupon validation.",
-        {
-            country_code: z.string().length(2).optional().describe("Filter to tariffs offered in this country."),
+function couponBody(coupon?: string): Record<string, unknown> {
+    return coupon ? {coupon: {coupon_name: coupon}} : {};
+}
+
+async function renewalQuote(modems: {modem_id: string; days: number}[], coupon?: string): Promise<ApiObject> {
+    const quote = await api.post("/payment/renewal-quote", {modems, ...couponBody(coupon)}, {readOnly: true});
+    const lines = quote?.line_items;
+    // The deployed quote handler filters unowned IDs. Never silently submit a
+    // partially quoted basket or infer that omitted modems can be renewed.
+    if (!Array.isArray(lines) || modems.some(modem => !lines.some(line => String(line.modem_id) === modem.modem_id))) {
+        throw new CoroniumError({code: "incomplete_renewal_quote", message: "The backend did not quote every requested modem. Verify ownership and request a complete quote before renewing.", suggested_action: "list_owned_proxies"});
+    }
+    if (typeof quote.total_usd !== "number" || !Number.isFinite(quote.total_usd)) invalidResponse("Renewal quote is missing its USD total.");
+    return quote;
+}
+
+export function registerShopTools(server: McpServer): void {
+    registerTool(server, "coronium_list_countries", {
+        description: "Read the public country and carrier catalog. Presence in the catalog does not mean purchasable stock; check list_tariffs for current availability.",
+        input: {}, run: async () => ({countries: arrayResponse(await api.publicGet("/countries"), "Countries")}),
+    });
+    registerTool(server, "coronium_list_tariffs", {
+        description: "Read available modem plans with backend stock, price, period, country, carrier and capabilities. Stock is a snapshot and can change before checkout; multiple plans may share the same modems. Use list_pool_tariffs for pay-per-GB plans.",
+        input: {country_code: countrySchema.optional(), carrier_id: idSchema.optional()},
+        run: async ({country_code, carrier_id}) => {
+            const response = await api.publicGet("/tariffs/available");
+            let tariffs = arrayResponse(response, "Available tariffs");
+            if (country_code) tariffs = tariffs.filter(tariff => tariff.country_code === country_code);
+            if (carrier_id) tariffs = tariffs.filter(tariff => String(tariff.carrier_id) === carrier_id);
+            return {tariffs, count: tariffs.length, cached: response._cached ?? null, age_ms: response._ageMs ?? null};
         },
-        async ({country_code}) => {
-            try {
-                let list = unwrap<any[]>(await api.pub("GET", "/tariffs/available"));
-                if (!Array.isArray(list)) return err("Unexpected response from /tariffs/available.");
-                if (country_code) {
-                    const cc = country_code.toUpperCase();
-                    list = list.filter((t: any) => t.country_code === cc || (t.countries || []).some((c: any) => (c.country_code || c.code) === cc));
-                }
-                if (list.length === 0) return ok("No tariffs match.");
-                return ok(list.map((t: any) => {
-                    const period = t.period || t.duration || "?";
-                    const price = t.price ?? t.price_usd ?? "?";
-                    const stock = t.stock != null ? ` | stock=${t.stock}` : "";
-                    const cc = t.country_code || "?";
-                    const carrier = t.carrier_name ? ` | carrier=${t.carrier_name}` : "";
-                    // ip_stack:{ipv4,ipv6,native_ipv6} — surface IP-stack availability.
-                    let ipTag = "";
-                    if (t.ip_stack) {
-                        if (t.ip_stack.native_ipv6) ipTag = " | IPv6(native)";
-                        else if (t.ip_stack.ipv6 > 0) ipTag = ` | IPv6:${t.ip_stack.ipv6}/IPv4:${t.ip_stack.ipv4}`;
-                        else ipTag = " | IPv4";
-                    }
-                    return `  ${t._id || t.id} — ${t.name} | ${cc} | ${period} | $${price}${carrier}${stock}${ipTag}`;
-                }).join("\n"));
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_list_free_modems",
-        "List free (purchasable) modems available right now. Useful before buying — confirms the country/tariff combination has live stock.",
-        {
-            country_code: z.string().length(2).optional(),
+    });
+    registerTool(server, "coronium_list_free_modems", {
+        description: "Read aggregate free modem stock by country/carrier/region, with optional country filtering. Counts are backend snapshots, not reservations or connectivity tests.",
+        input: {country_code: countrySchema.optional()},
+        run: async ({country_code}) => {
+            const [stockResponse, countriesResponse] = await Promise.all([api.publicGet("/free-modems"), api.publicGet("/countries")]);
+            const countries = arrayResponse(countriesResponse, "Countries");
+            let stock = arrayResponse(stockResponse, "Free modem stock").map(row => ({...row, country_code: countries.find(country => String(country._id) === String(row.country_id))?.country_code ?? null}));
+            if (country_code) stock = stock.filter(row => row.country_code === country_code);
+            return {stock};
         },
-        async ({country_code}) => {
-            try {
-                const params: any = {};
-                if (country_code) params.country_code = country_code.toUpperCase();
-                const list = unwrap<any[]>(await api.pub("GET", "/free-modems", undefined, params));
-                if (!Array.isArray(list) || list.length === 0) return ok("No free modems available with those filters.");
-                return ok(`${list.length} stock buckets:\n` + list.slice(0, 50).map((m: any) => `  country_id=${m.country_id || "?"} carrier=${m.carrier_id || "—"} region=${m.region_id || "—"} count=${m.count}`).join("\n"));
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_check_coupon",
-        "Validate a coupon code. Returns the discount %, fixed-amount, or error if invalid/expired.",
-        {
-            code: z.string().min(1),
+    });
+    registerTool(server, "coronium_check_coupon", {
+        description: "Validate a coupon using the backend's coupon_name field. This is a read-only POST. The eventual server quote/receipt determines any discount.",
+        input: {code: z.string().min(1).max(128)},
+        run: async ({code}) => ({response: await api.post("/coupons/check", {coupon_name: code}, {readOnly: true})}),
+    });
+    registerTool(server, "coronium_buy_modems_with_balance", {
+        description: "Spend account credit (USD, default) or BTC to buy a current modem tariff. Read plan/stock and balance first, then obtain authorization for the funding source, quantity and price. Backend pricing is authoritative. Preserve the idempotency key and complete receipt; no automatic write retries or substitute purchases.",
+        input: {tariff_id: idSchema, quantity: z.number().int().min(1).max(100), funding_source: fundingSource,
+            country_code: countrySchema.optional().describe("Optional guard: refuse if this does not match the selected tariff's country."),
+            metadata: z.union([z.string().max(8000), z.record(z.unknown())]).optional(), coupon: couponField, want_p0f: z.boolean().optional(), ...paymentFields},
+        access: "write",
+        run: async ({tariff_id, quantity, funding_source, country_code, metadata, coupon, want_p0f, idempotency_key}) => {
+            const tariffs = arrayResponse(await api.publicGet("/tariffs/available"), "Available tariffs");
+            const tariff = tariffs.find(row => String(row._id) === tariff_id);
+            if (!tariff || (country_code && tariff.country_code !== country_code)) throw new CoroniumError({code: "tariff_unavailable", message: "The tariff is unavailable or does not match the requested country.", suggested_action: "list_tariffs"});
+            if (typeof tariff.stock !== "number" || tariff.stock < quantity) throw new CoroniumError({code: "insufficient_stock", message: "The current stock snapshot cannot satisfy this quantity.", suggested_action: "list_tariffs"});
+            const body = {tariff_id, modemCount: quantity, ...couponBody(coupon),
+                ...(metadata !== undefined ? {metadata: typeof metadata === "string" ? metadata : JSON.stringify(metadata)} : {}),
+                ...(want_p0f !== undefined ? {wantP0f: want_p0f} : {})};
+            const path = funding_source === "btc" ? "/payment/buy-modems-with-crypto-balance" : "/payment/buy-with-account-credit";
+            return {funding_source, ...await api.payment(path, body, idempotency_key)};
         },
-        async ({code}) => {
-            try {
-                const r = await api.post("/coupons/check", {code});
-                return ok(JSON.stringify(r, null, 2));
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_buy_modems_with_balance",
-        "Buy one or more modems using account_credit (USD wallet balance). Specify a tariff_id and quantity. Optionally include a coupon. Modems are auto-assigned from free stock matching the tariff's country pool.",
-        {
-            tariff_id: z.string().describe("Tariff _id from coronium_list_tariffs."),
-            quantity: z.number().int().positive().max(50).default(1),
-            country_code: z.string().length(2).optional().describe("ISO-2 to constrain the assigned modems."),
-            coupon: z.string().optional(),
+    });
+    registerTool(server, "coronium_get_renewal_quote", {
+        description: "Get the backend's authoritative USD renewal quote for owned modem IDs and 1–90 days each. Refuses partial quotes. No money is spent and no subscription changes. Quotes are not price locks.",
+        input: renewalFields, run: async ({modems, coupon}) => ({quote: await renewalQuote(modems, coupon)}),
+    });
+    registerTool(server, "coronium_renew_modems_with_balance", {
+        description: "Renew owned modems for specified days using account_credit or btc. Obtain a renewal quote and authorization first. Submits modems:[{modem_id,days}] without a purchase tariff. Preserve the idempotency key and receipt; check payment state after ambiguous failures.",
+        input: {...renewalFields, funding_source: fundingSource, ...paymentFields}, access: "write",
+        run: async ({modems, coupon, funding_source, idempotency_key}) => {
+            const quote = await renewalQuote(modems, coupon);
+            const path = funding_source === "btc" ? "/payment/renew-modems-with-crypto-balance" : "/payment/renew-with-account-credit";
+            return {funding_source, quote_before_submission: quote, ...await api.payment(path, {modems, ...couponBody(coupon)}, idempotency_key)};
         },
-        async ({tariff_id, quantity, country_code, coupon}) => {
-            try {
-                const body: any = {tariff_id, count: quantity};
-                if (country_code) body.country_code = country_code.toUpperCase();
-                if (coupon) body.coupon = coupon;
-                const r = await api.post("/payment/buy-modems-with-crypto-balance", body);
-                return ok(`✓ Purchase requested\n${JSON.stringify(r, null, 2)}`);
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_renew_modems_with_balance",
-        "Renew one or more existing modems for an additional tariff period using account_credit.",
-        {
-            modem_ids: z.array(z.string()).min(1).describe("Array of modem _id values."),
-            tariff_id: z.string().describe("Tariff _id to renew under (typically the existing one)."),
-            coupon: z.string().optional(),
-        },
-        async ({modem_ids, tariff_id, coupon}) => {
-            try {
-                const body: any = {modem_ids, tariff_id};
-                if (coupon) body.coupon = coupon;
-                const r = await api.post("/payment/renew-modems-with-crypto-balance", body);
-                return ok(`✓ Renewal requested\n${JSON.stringify(r, null, 2)}`);
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_get_payment_status",
-        "Check the status of a payment by id. Useful after coronium_buy_modems_with_balance / coronium_renew_modems_with_balance to confirm settlement.",
-        {
-            payment_id: z.string(),
-        },
-        async ({payment_id}) => {
-            try {
-                const r = await api.get(`/payments/${payment_id}/status`);
-                return ok(JSON.stringify(r, null, 2));
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
+    });
+    registerTool(server, "coronium_get_payment_status", {
+        description: "Read a payment's current backend status by its ID from a receipt. Keep pending/failed states intact; do not infer provisioning from HTTP success alone.",
+        input: {payment_id: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/)},
+        run: async ({payment_id}) => ({response: await api.get(`/payments/${encodeURIComponent(payment_id)}/status`)}),
+    });
 }

@@ -1,333 +1,127 @@
-// Proxy lifecycle tools — the bulk of daily-ops surface for an agent.
-//
-// Naming follows coronium_<verb>_modem so the existing v1.x tools
-// (coronium_get_proxies, coronium_rotate_modem) keep working while new
-// verbs slot in cleanly. Aliases for the snake_case "action_object"
-// pattern used by the wallet-bound MCP at @coronium/mcp are NOT added
-// here to avoid duplicate-tool noise — agents can call either MCP and
-// get a similar surface, but the prefix differs by intent.
-
+import {randomBytes} from "node:crypto";
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {z} from "zod";
 import {api} from "../api-client.js";
 import {config} from "../config.js";
-import {ok, err, formatProxyDetail, formatProxyLine, maskUrl, unwrap} from "../formatters.js";
-import axios from "axios";
+import {CoroniumError, invalidResponse} from "../errors.js";
+import {unwrap} from "../formatters.js";
+import {findProxy, normalizedProxies, proxyField, resolveProxyId} from "../proxies.js";
+import {confirmation, countrySchema, registerTool} from "../tool.js";
 
-const proxyIdField = z.string().describe("Modem _id (24-char hex) or portId/name (e.g. cor_PL_181fd3aa).");
-
-async function resolveProxyId(idOrName: string, token?: string): Promise<{_id: string, raw: any}> {
-    // If the caller passed a 24-char hex, use it directly.
-    if (/^[a-f0-9]{24}$/i.test(idOrName)) {
-        return {_id: idOrName, raw: null};
-    }
-    // Otherwise look up by name/portId in the proxies list.
-    const list = unwrap<any[]>(await api.get("/account/proxies", undefined, token));
-    const match = (list || []).find((p: any) => p.name === idOrName || p.portId === idOrName);
-    if (!match) throw new Error(`No proxy with name or portId "${idOrName}". Try coronium_get_proxies to list yours.`);
-    return {_id: match._id, raw: match};
+async function restart(identifier: string): Promise<Record<string, unknown>> {
+    const id = await resolveProxyId(identifier);
+    const response = await api.post(`/modems/${id}/restart`, {}, {timeoutMs: config.actionTimeoutMs});
+    if (response?.rotated === false) throw new CoroniumError({code: "rotation_failed", message: response.message || "The backend could not verify a new IP.", details: response, suggested_action: "check_rotation_status"});
+    if (response?.rotated !== true) invalidResponse("Rotation returned no verified rotated flag. Check rotation status before another action.");
+    return {response};
 }
 
-export function registerProxyTools(server: McpServer) {
-
-    server.tool(
-        "coronium_get_proxies",
-        "List the user's mobile proxies. Returns one line per proxy with name, host:port, login, expiry, country.",
-        {
-            country_code: z.string().length(2).optional().describe("ISO-2 filter, e.g. PL, US."),
-            online_only: z.boolean().optional().describe("Only return modems currently online."),
-            expiring_within_days: z.number().int().positive().optional().describe("Only return modems whose tariff expires within N days."),
+export function registerProxyTools(server: McpServer): void {
+    registerTool(server, "coronium_get_proxies", {
+        description: "List owned proxies with backend credentials, usable HTTP/SOCKS5 URLs, country, expiry and per-modem capabilities. Connection details are sensitive. Listing does not test connectivity or prove SOCKS5 works.",
+        input: {country_code: countrySchema.optional(), online_only: z.boolean().optional(), expiring_within_days: z.number().int().positive().optional()},
+        run: async ({country_code, online_only, expiring_within_days}) => {
+            let proxies = await normalizedProxies();
+            if (country_code) proxies = proxies.filter(proxy => proxy.country_code === country_code);
+            if (online_only) proxies = proxies.filter(proxy => proxy.isOnline === true);
+            if (expiring_within_days !== undefined) {
+                const cutoff = Date.now() + expiring_within_days * 86_400_000;
+                proxies = proxies.filter(proxy => proxy.tariff_expired_at && Number(proxy.tariff_expired_at) <= cutoff);
+            }
+            return {proxies, count: proxies.length};
         },
-        async ({country_code, online_only, expiring_within_days}) => {
-            try {
-                let list = unwrap<any[]>(await api.get("/account/proxies"));
-                if (!Array.isArray(list)) return err("Unexpected response shape from /account/proxies.");
-                if (country_code) list = list.filter(p => (p.country?.country_code || p.country_code) === country_code.toUpperCase());
-                if (online_only) list = list.filter(p => p.isOnline);
-                if (expiring_within_days != null) {
-                    const cutoff = Date.now() + expiring_within_days * 86400_000;
-                    list = list.filter(p => p.tariff_expired_at && p.tariff_expired_at <= cutoff);
-                }
-                if (list.length === 0) return ok("No proxies match the filters.");
-                return ok(`${list.length} proxies:\n` + list.map(formatProxyLine).join("\n"));
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_get_proxy",
-        "Get full details for a single proxy by id or name. Includes credentials, expiry, external IP, rotation interval.",
-        {proxy: proxyIdField},
-        async ({proxy}) => {
-            try {
-                const list = unwrap<any[]>(await api.get("/account/proxies"));
-                const match = (list || []).find((p: any) => p._id === proxy || p.name === proxy || p.portId === proxy);
-                if (!match) return err(`No proxy "${proxy}".`);
-                return ok(formatProxyDetail(match));
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_restart_modem",
-        "Trigger a rotation (new IP) on the customer's modem via authenticated /v3 endpoint. Idempotent in-flight: if a rotation is already pending, returns its status. Use coronium_get_rotation_status to poll.",
-        {proxy: proxyIdField},
-        async ({proxy}) => {
-            try {
-                const {_id} = await resolveProxyId(proxy);
-                const r = await api.post(`/modems/${_id}/restart`);
-                return ok(`✓ Rotation queued for ${proxy}\n  ${JSON.stringify(r, null, 2)}`);
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_get_rotation_status",
-        "Poll rotation status for a modem. Returns idle | rotating | success | failed plus the current and previous external IPs. Backend stuck-rotation janitor (deployed 2026-04-30) auto-clears stale 'rotating' states within 5 min.",
-        {proxy: proxyIdField},
-        async ({proxy}) => {
-            try {
-                const {_id} = await resolveProxyId(proxy);
-                const r = await api.get(`/modems/${_id}/rotation-status`);
-                return ok(JSON.stringify(r, null, 2));
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_rotate_modem",
-        "Token-based rotation via the public reset service (default https://mreset.xyz). Doesn't require an API token — uses the per-modem rotation token embedded in the proxy record. Optionally polls until completion.",
-        {
-            proxy_identifier: z.string().describe("Modem name, portId, _id, or rotation token (UUID)."),
-            wait_for_completion: z.boolean().optional().default(true),
-            max_wait_time: z.number().int().positive().optional().default(30_000),
+    });
+    registerTool(server, "coronium_get_proxy", {
+        description: "Read an owned proxy's credentials, URLs, expiry, rotation token and actual backend capability flags. Treat these results as secrets. No connection is tested.",
+        input: {proxy: proxyField}, run: async ({proxy}) => ({proxy: findProxy(await normalizedProxies(), proxy)}),
+    });
+    registerTool(server, "coronium_restart_modem", {
+        description: "Rotate an owned modem and wait for the backend's synchronous result. Existing connections may drop. Success requires rotated:true. Do not replace or repeatedly restart after a failure; inspect status first.",
+        input: {proxy: proxyField, confirm: confirmation}, access: "write", destructive: true,
+        run: async ({proxy}) => restart(proxy),
+    });
+    registerTool(server, "coronium_rotate_modem", {
+        description: "Rotate using an owned modem ID/name, or an explicit UUID rotation token through the Coronium v3 token route. Waits for the backend result; may interrupt connections. No fire-and-forget or substring-based success detection.",
+        input: {proxy_identifier: proxyField, confirm: confirmation}, access: "write", destructive: true,
+        run: async ({proxy_identifier}) => {
+            if (!z.string().uuid().safeParse(proxy_identifier).success) return restart(proxy_identifier);
+            const response = await api.get(`/modems/rotate-modem-by-token/${encodeURIComponent(proxy_identifier)}`, undefined, {public: true, mutates: true, timeoutMs: config.actionTimeoutMs});
+            if (response?.result !== "ok" || !response.new_ip) invalidResponse("Token rotation returned no confirmed new IP. Check state before retrying.");
+            return {response};
         },
-        async ({proxy_identifier, wait_for_completion, max_wait_time}) => {
-            try {
-                // If it looks like a UUID rotation token, hit the reset URL directly. Otherwise, look up the modem and fetch its restartByToken/rotationToken.
-                let restartUrl: string | undefined;
-                let statusUrl: string | undefined;
-                let modemLabel = proxy_identifier;
-                if (/^[a-f0-9-]{32,}$/i.test(proxy_identifier)) {
-                    restartUrl = `${config.rotationServiceUrl}/restart-modem/${proxy_identifier}`;
-                    statusUrl = `${config.rotationServiceUrl}/get-modem-status/${proxy_identifier}`;
-                } else {
-                    const list = unwrap<any[]>(await api.get("/account/proxies"));
-                    const m = (list || []).find((p: any) => p.name === proxy_identifier || p.portId === proxy_identifier || p._id === proxy_identifier);
-                    if (!m) return err(`No proxy "${proxy_identifier}".`);
-                    modemLabel = m.name || m.portId;
-                    const tok = m.restart_token || m.rotationToken || m.proxy?.restartByToken;
-                    if (!tok) return err(`Proxy "${modemLabel}" has no rotation token. Use coronium_restart_modem (authenticated) instead.`);
-                    restartUrl = `${config.rotationServiceUrl}/restart-modem/${tok}`;
-                    statusUrl = `${config.rotationServiceUrl}/get-modem-status/${tok}`;
-                }
-
-                const start = Date.now();
-                await axios.get(restartUrl, {timeout: 15_000});
-                if (!wait_for_completion) {
-                    return ok(`✓ Rotation triggered for ${modemLabel} via ${maskUrl(restartUrl)}. Not waiting for completion.`);
-                }
-                while (Date.now() - start < max_wait_time) {
-                    await new Promise(r => setTimeout(r, 2_000));
-                    try {
-                        const sr = await axios.get(statusUrl!, {timeout: 8_000});
-                        const body = String(sr.data || "").toLowerCase();
-                        if (body.includes("success") || body.includes("complete") || body.includes("rotated")) {
-                            return ok(`✓ Rotation completed for ${modemLabel} (${Math.round((Date.now() - start) / 1000)}s)`);
-                        }
-                        if (body.includes("error") || body.includes("fail")) {
-                            return err(`Rotation reported failure for ${modemLabel}: ${String(sr.data).slice(0, 200)}`);
-                        }
-                    } catch { /* keep polling */ }
-                }
-                return ok(`Rotation triggered for ${modemLabel}; status still pending after ${Math.round(max_wait_time / 1000)}s. Use coronium_get_rotation_status to keep polling.`);
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_test_modem",
-        "Test connectivity through a proxy. Sends a request through the modem's HTTP/SOCKS endpoint and returns the observed external IP plus latency.",
-        {proxy: proxyIdField},
-        async ({proxy}) => {
-            try {
-                const {_id} = await resolveProxyId(proxy);
-                const r = await api.post(`/modems/${_id}/test`);
-                return ok(typeof r === "string" ? r : JSON.stringify(r, null, 2));
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_replace_modem",
-        "Swap a broken/dead modem for a working one of the same country/tariff. Used when a modem has consecutive ping failures or won't rotate. Subscription transfers — you keep the same expiry. Requires existing-customer auth.",
-        {
-            proxy: proxyIdField,
-            same_country: z.boolean().optional().default(true).describe("If true, refuse the swap unless replacement stock exists in the same country."),
+    });
+    registerTool(server, "coronium_get_rotation_status", {
+        description: "Read rotation state: idle, rotating, done or failed, plus IP, timing and backend failure details. A pending or idle state does not prove a completed rotation.",
+        input: {proxy: proxyField}, run: async ({proxy}) => ({response: await api.get(`/modems/${await resolveProxyId(proxy)}/rotation-status`)}),
+    });
+    registerTool(server, "coronium_test_modem", {
+        description: "Ask the backend to run its connectivity diagnostic. This makes real network traffic; it does not independently verify both HTTP and SOCKS5. Preserve the reported protocol and result; never assume a listed SOCKS port works.",
+        input: {proxy: proxyField}, access: "write",
+        run: async ({proxy}) => ({response: await api.post(`/modems/${await resolveProxyId(proxy)}/test`, {}, {timeoutMs: config.actionTimeoutMs}), independently_verified_protocols: []}),
+    });
+    registerTool(server, "coronium_replace_modem", {
+        description: "Replace an owned proxy through the backend's replacement policy. This can change its credentials, address and assigned modem and disrupt service. Requires explicit authorization; never use as an automatic recovery step.",
+        input: {proxy: proxyField, confirm: confirmation}, access: "write", destructive: true,
+        run: async ({proxy}) => ({response: await api.post(`/modems/${await resolveProxyId(proxy)}/replace`, {}, {timeoutMs: config.actionTimeoutMs})}),
+    });
+    registerTool(server, "coronium_set_rotation_interval", {
+        description: "Set auto-rotation cadence: 0 disables it, otherwise 60–86400 seconds. Rotation interrupts connections, so changing this requires authorization.",
+        input: {proxy: proxyField, interval_seconds: z.number().int().min(0).max(86_400).refine(value => value === 0 || value >= 60, "Use 0 or at least 60 seconds."), confirm: confirmation},
+        access: "write", destructive: true, idempotent: true,
+        run: async ({proxy, interval_seconds}) => ({response: await api.put(`/modems/${await resolveProxyId(proxy)}/set-rotation-interval`, {rotation_interval: interval_seconds})}),
+    });
+    registerTool(server, "coronium_change_proxy_password", {
+        description: "Change an owned proxy's password, invalidating its previous credentials. Supply at least 6 characters, or omit to generate a cryptographically random password in this MCP process. The password is sent explicitly to the backend.",
+        input: {proxy: proxyField, proxy_password: z.string().min(6).max(128).optional(), confirm: confirmation}, access: "write", destructive: true,
+        run: async ({proxy, proxy_password}) => {
+            const password = proxy_password || randomBytes(24).toString("base64url");
+            const response = await api.put(`/modems/${await resolveProxyId(proxy)}/change-password`, {proxy_password: password});
+            return {response, proxy_password: password};
         },
-        async ({proxy, same_country}) => {
-            try {
-                const {_id} = await resolveProxyId(proxy);
-                const r = await api.post(`/modems/${_id}/replace`, {same_country});
-                return ok(`✓ Replacement queued for ${proxy}\n  ${JSON.stringify(r, null, 2)}`);
-            } catch (e: any) {
-                return err(e.message);
+    });
+    registerTool(server, "coronium_set_modem_metadata", {
+        description: "Set a private owner note. Objects are JSON-serialized to the backend's metadata string; this does not rename hardware or change ports.",
+        input: {proxy: proxyField, metadata: z.union([z.string().max(8000), z.record(z.unknown())])}, access: "write", idempotent: true,
+        run: async ({proxy, metadata}) => ({response: await api.put(`/modems/${await resolveProxyId(proxy)}/set-metadata`, {metadata: typeof metadata === "string" ? metadata : JSON.stringify(metadata)})}),
+    });
+    registerTool(server, "coronium_get_p0f_options", {
+        description: "Read per-modem/provider support, accepted OS presets and cooldown. Use these actual options before setting an OS; capabilities differ by server.",
+        input: {proxy: proxyField}, run: async ({proxy}) => ({response: await api.get(`/modems/${await resolveProxyId(proxy)}/p0f-options`)}),
+    });
+    registerTool(server, "coronium_set_modem_os", {
+        description: "Set an OS preset from this modem's p0f-options response, or empty string to disable spoofing when supported. Checks capability first. May reapply settings and interrupt connections.",
+        input: {proxy: proxyField, os: z.string().max(128), confirm: confirmation}, access: "write", destructive: true,
+        run: async ({proxy, os}) => {
+            const id = await resolveProxyId(proxy);
+            const options = unwrap(await api.get(`/modems/${id}/p0f-options`));
+            if (!options?.supported || !Array.isArray(options.options) || (os !== "" && !options.options.includes(os))) {
+                throw new CoroniumError({code: "unsupported_os", message: "This modem does not advertise support for that OS preset.", details: options, suggested_action: "get_p0f_options"});
             }
-        }
-    );
-
-    server.tool(
-        "coronium_set_rotation_interval",
-        "Configure auto-rotation cadence (in seconds). 0 disables auto-rotate. Typical values: 60 (1 min), 300 (5 min), 1800 (30 min). Backend Rotator service polls and triggers per this interval.",
-        {
-            proxy: proxyIdField,
-            interval_seconds: z.number().int().min(0).max(86_400).describe("Seconds between auto-rotations. 0 = manual only."),
+            return {response: await api.put(`/modems/${id}/set-os`, {os})};
         },
-        async ({proxy, interval_seconds}) => {
-            try {
-                const {_id} = await resolveProxyId(proxy);
-                await api.put(`/modems/${_id}/set-rotation-interval`, {rotation_interval: interval_seconds});
-                return ok(`✓ Auto-rotation set to every ${interval_seconds}s for ${proxy}`);
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_change_proxy_password",
-        "Rotate the HTTP/SOCKS proxy password. Generates a new random password server-side and returns it.",
-        {proxy: proxyIdField},
-        async ({proxy}) => {
-            try {
-                const {_id} = await resolveProxyId(proxy);
-                const r = await api.put(`/modems/${_id}/change-password`);
-                return ok(`✓ Password rotated for ${proxy}\n  new credentials: ${JSON.stringify(r, null, 2)}`);
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_set_modem_metadata",
-        "Set a free-form metadata note on a modem (e.g. 'production-fb-account-X'). Visible only to the owner; useful for tagging proxies in agent workflows.",
-        {
-            proxy: proxyIdField,
-            metadata: z.string().max(200).describe("Free-form string, ≤200 chars."),
-        },
-        async ({proxy, metadata}) => {
-            try {
-                const {_id} = await resolveProxyId(proxy);
-                await api.put(`/modems/${_id}/set-metadata`, {metadata});
-                return ok(`✓ Metadata set for ${proxy}.`);
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_set_modem_os",
-        "Set the p0f OS fingerprint preset (Android / iOS / Windows / etc) the modem should advertise. Useful when the destination platform fingerprints clients.",
-        {
-            proxy: proxyIdField,
-            os: z.string().describe("Preset name. Common: 'android', 'ios', 'windows', 'linux', 'macos', 'auto', or 'off'."),
-        },
-        async ({proxy, os}) => {
-            try {
-                const {_id} = await resolveProxyId(proxy);
-                await api.put(`/modems/${_id}/set-os`, {os});
-                return ok(`✓ p0f OS preset set to "${os}" for ${proxy}.`);
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_cancel_modem",
-        "Cancel a modem subscription (no further auto-renew). The modem remains usable until its current tariff_expired_at. Refund policy applies per terms.",
-        {proxy: proxyIdField},
-        async ({proxy}) => {
-            try {
-                const {_id} = await resolveProxyId(proxy);
-                const r = await api.post(`/modems/${_id}/cancel`);
-                return ok(`✓ Cancellation requested for ${proxy}\n  ${JSON.stringify(r, null, 2)}`);
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_get_openvpn_config",
-        "Get the OpenVPN config blob for a modem. Some modems offer VPN tunnel access in addition to HTTP/SOCKS proxy; this returns the .ovpn content.",
-        {proxy: proxyIdField},
-        async ({proxy}) => {
-            try {
-                const {_id} = await resolveProxyId(proxy);
-                const r = await api.get(`/modems/${_id}/openvpn`);
-                return ok(typeof r === "string" ? r : JSON.stringify(r, null, 2));
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_get_proxy_health",
-        "Liveness/health snapshot for all your proxies (per-modem reachability + recommendation). Call this before retrying through a proxy — stop hammering dead modems; swap them with coronium_replace_modem.",
-        {},
-        async () => {
-            try {
-                const r = await api.get("/account/proxies/health");
-                return ok(JSON.stringify(unwrap(r), null, 2));
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_get_p0f_options",
-        "List the valid OS fingerprint (p0f) values accepted by coronium_set_modem_os for a modem. Call this first so you don't guess the OS string.",
-        {proxy: proxyIdField},
-        async ({proxy}) => {
-            try {
-                const {_id} = await resolveProxyId(proxy);
-                const r = await api.get(`/modems/${_id}/p0f-options`);
-                return ok(JSON.stringify(unwrap(r), null, 2));
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_apply_modem_settings",
-        "Re-apply / re-push a modem's port settings on the server (useful after a config change or if a proxy stops responding but the modem is online).",
-        {proxy: proxyIdField},
-        async ({proxy}) => {
-            try {
-                const {_id} = await resolveProxyId(proxy);
-                const r = await api.post(`/modems/${_id}/apply-settings`, {});
-                return ok(JSON.stringify(r, null, 2));
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
+    });
+    registerTool(server, "coronium_preview_modem_cancellation", {
+        description: "Preview the backend's refund calculation using dryRun:true. Does not cancel, release or alter the modem. Read this before requesting authorization for immediate cancellation.",
+        input: {proxy: proxyField},
+        run: async ({proxy}) => ({response: await api.post(`/modems/${await resolveProxyId(proxy)}/cancel`, {dryRun: true}, {readOnly: true})}),
+    });
+    registerTool(server, "coronium_cancel_modem", {
+        description: "IMMEDIATELY cancel and release an owned proxy, applying the backend's refund policy. Access ends now, even when no refund is due. This does NOT merely disable auto-renew. Preview first and obtain explicit authorization for losing this proxy.",
+        input: {proxy: proxyField, reason: z.string().max(2000).optional(), confirm: confirmation}, access: "write", destructive: true,
+        run: async ({proxy, reason}) => ({response: await api.post(`/modems/${await resolveProxyId(proxy)}/cancel`, {reason}, {timeoutMs: config.actionTimeoutMs})}),
+    });
+    registerTool(server, "coronium_get_openvpn_config", {
+        description: "Download the owned modem's OpenVPN configuration when its backend capabilities allow it. The configuration contains secrets; return it only to the owner.",
+        input: {proxy: proxyField},
+        run: async ({proxy}) => ({configuration: await api.get(`/modems/${await resolveProxyId(proxy)}/openvpn`, undefined, {text: true})}),
+    });
+    registerTool(server, "coronium_get_proxy_health", {
+        description: "Read the backend health snapshot for owned proxies. It is evidence for diagnosis, not authorization to replace, release or reconfigure a modem, and does not prove all protocols work.",
+        input: {}, run: async () => ({response: await api.get("/account/proxies/health")}),
+    });
+    registerTool(server, "coronium_apply_modem_settings", {
+        description: "Ask the backend to reapply an owned proxy's current settings. May interrupt connections. Requires explicit authorization; never issue broad server or port repairs.",
+        input: {proxy: proxyField, confirm: confirmation}, access: "write", destructive: true,
+        run: async ({proxy}) => ({response: await api.post(`/modems/${await resolveProxyId(proxy)}/apply-settings`, {}, {timeoutMs: config.actionTimeoutMs})}),
+    });
 }

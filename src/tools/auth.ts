@@ -1,60 +1,30 @@
-// Auth tools: login, validate, logout. The other tools auto-login on 401
-// so most users never call these directly — they're here for explicit
-// flows (manual token refresh, switching accounts, scripted tests).
-
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {z} from "zod";
 import {api} from "../api-client.js";
-import {tokenStore} from "../token-store.js";
 import {config} from "../config.js";
-import {ok, err} from "../formatters.js";
+import {CoroniumError} from "../errors.js";
+import {registerTool} from "../tool.js";
 
-export function registerAuthTools(server: McpServer) {
-    server.tool(
-        "coronium_login",
-        "Authenticate with email + password and cache an encrypted token at ~/.coronium/token.enc. Most other tools auto-login when CORONIUM_LOGIN/CORONIUM_PASSWORD are set in the env, so calling this manually is only needed for explicit re-auth or account switching.",
-        {
-            login: z.string().email().optional().describe("Coronium account email. Falls back to CORONIUM_LOGIN env."),
-            password: z.string().optional().describe("Coronium account password. Falls back to CORONIUM_PASSWORD env."),
+export function registerAuthTools(server: McpServer): void {
+    registerTool(server, "coronium_login", {
+        description: "Log in using account credentials. Prefer environment credentials over passing secrets through a conversation. Tokens remain in memory unless TOKEN_ENCRYPTION_KEY is configured; no token is returned.",
+        input: {login: z.string().email().optional(), password: z.string().min(1).optional()}, access: "auth",
+        run: async ({login, password}) => {
+            const email = login || config.login;
+            const secret = password || config.password;
+            if (!email || !secret) throw new CoroniumError({code: "missing_credentials", message: "Set CORONIUM_LOGIN and CORONIUM_PASSWORD, or supply both credentials."});
+            await api.login(email, secret);
+            return {authenticated: true, token_storage: config.tokenEncryptionKey ? "encrypted_file" : "memory"};
         },
-        async ({login, password}) => {
-            const u = login || config.login;
-            const p = password || config.password;
-            if (!u || !p) return err("Missing credentials. Pass login+password or set CORONIUM_LOGIN/CORONIUM_PASSWORD.");
-            try {
-                const token = await api.login(u, p);
-                return ok(`✓ Logged in as ${u}\n  token cached at ~/.coronium/token.enc (AES-256-CBC)\n  token preview: ${token.substring(0, 12)}...`);
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_check_token",
-        "Verify the cached token is still valid. Returns true/false. Useful before a long agentic session — if invalid, call coronium_login or rely on auto-login.",
-        {
-            token: z.string().optional().describe("Optional explicit token to validate. Defaults to the cached one."),
-        },
-        async ({token}) => {
-            const t = token || tokenStore.get();
-            if (!t) return err("No token cached. Call coronium_login first.");
-            try {
-                const valid = await api.validateToken(t);
-                return ok(valid ? "✓ Token is valid" : "✗ Token is invalid or expired");
-            } catch (e: any) {
-                return err(e.message);
-            }
-        }
-    );
-
-    server.tool(
-        "coronium_logout",
-        "Clear the cached token from ~/.coronium/token.enc. Subsequent calls will require re-authentication (manual or auto-login).",
-        {},
-        async () => {
-            tokenStore.clear();
-            return ok("✓ Token cleared. Cached file removed.");
-        }
-    );
+    });
+    registerTool(server, "coronium_check_token", {
+        description: "Validate the current or supplied token against the account API. Returns valid:false for rejected credentials; network failures remain errors.",
+        input: {token: z.string().min(1).optional()},
+        run: async ({token}) => ({valid: await api.validateToken(token)}),
+    });
+    registerTool(server, "coronium_logout", {
+        description: "Clear the in-memory and persisted token and disable automatic login until an explicit login or process restart.",
+        input: {}, access: "auth", idempotent: true,
+        run: async () => { api.logout(); return {authenticated: false, automatic_login_disabled: true}; },
+    });
 }
