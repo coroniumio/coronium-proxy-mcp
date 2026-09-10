@@ -6,7 +6,9 @@ This repository calls existing customer APIs. It does not contain the private Op
 
 ## Connect
 
-Requires **Node.js 20 or newer**. Configure your MCP host to launch the pinned version:
+Requires **Node.js 20 or newer**. Confirm the version exists on npm before using the configuration below (`npm view coronium-proxy-mcp@2.0.0 version`). If publication is pending, use the [GitHub checkout installation](#develop-and-verify). GitHub source updates and npm publication are separate; see the [release verification record](docs/release-verification-2026-09-10.md).
+
+Configure your MCP host to launch the published, pinned version:
 
 ```json
 {
