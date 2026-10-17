@@ -1,0 +1,18 @@
+{
+  "name": "coronium",
+  "owner": {
+    "name": "Coronium",
+    "email": "hello@coronium.io",
+    "url": "https://www.coronium.io"
+  },
+  "metadata": {
+    "description": "Claude Code plugins for managing Coronium.io mobile proxies."
+  },
+  "plugins": [
+    {
+      "name": "coronium-mobile-proxies",
+      "source": "./plugins/coronium-mobile-proxies",
+      "description": "Check, rotate and connect the dedicated 4G/5G mobile proxies you rent from Coronium.io. No purchases from Claude."
+    }
+  ]
+}

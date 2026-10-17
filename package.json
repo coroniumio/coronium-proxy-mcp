@@ -21,7 +21,8 @@
     "test:package": "node scripts/package-smoke.mjs",
     "docs:generate": "node scripts/tool-catalog.mjs",
     "docs:check": "node scripts/tool-catalog.mjs --check",
-    "test:public": "node scripts/public-smoke.mjs"
+    "test:public": "node scripts/public-smoke.mjs",
+    "check:plugins": "node scripts/check-plugins.mjs"
   },
   "keywords": [
     "mcp",
