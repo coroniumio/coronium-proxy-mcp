@@ -11,7 +11,7 @@ A health check across the user's Coronium proxies, from overview to fix. Only us
 
 1. Call `coronium_get_proxy_health` once for the health snapshot of all owned proxies.
 2. Call `coronium_get_proxies` for names, countries and expiry dates. If the user named a country, pass `country_code`.
-3. Summarise in a short list, one line per proxy: name, country, online or offline, current IP if known, and expiry date. Put problems first. Flag any proxy that expires within 7 days.
+3. Summarise in a short list, one line per proxy: name, country, the health `status` (active, degraded, dead or expired) and `recommendation` as returned, current IP if known, and expiry date. Put problems first. Flag any proxy that expires within 7 days.
 
 Do not print usernames, passwords or rotation tokens in the overview. Connection details belong to the `connect-my-proxy` skill.
 
@@ -29,9 +29,9 @@ Rotation asks the carrier for a fresh IP. Offer it when a proxy is online but sl
 2. Only after the user agrees, call `coronium_rotate_modem` with the proxy and `confirm: true`. Rotate one proxy per approval.
 3. Read the result:
    - A new IP: report the old and new IP.
-   - `rotating` or pending: the rotation is still running. Call `coronium_get_rotation_status` after about 30 seconds and report what it says. Never start another rotation while one is pending, and never treat a pending rotation as a failure.
+   - `rotating` or pending: the rotation is still running. Call `coronium_get_rotation_status` after about 30 seconds and report what it says. Never start another rotation while one is pending, and never treat a pending rotation as a failure. Check the status at most three times, then tell the user it is still running and stop. If the status says `failed`, report the failure and its reason; do not keep polling.
    - The IP did not change: the attempt ran but the carrier returned the same IP. The user can try again after the cooldown.
-   - Refused with a wait time (`retry_after_seconds` or HTTP 429): tell the user how long to wait. Do not retry on your own.
+   - Refused with HTTP 429: the proxy is in its cooldown between rotations. Tell the user how long to wait, using `retry_after_seconds` or the wait time in the error message, or about a minute when neither is given. Do not retry on your own.
    - Any other error: show the message and stop.
 4. Never retry a rotation automatically, and never replace, restart or reconfigure a proxy as a recovery step unless the user asks for that specific action.
 

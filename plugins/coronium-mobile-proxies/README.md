@@ -12,9 +12,10 @@ This version cannot make purchases. Buying, renewing, topping up and cancelling 
 
 ## Setup
 
-1. Install the plugin from the Claude plugin directory (`/plugin`, then Discover), or from Coronium's own marketplace:
+1. Install the plugin from the Claude plugin directory (`/plugin`, then Discover), or add Coronium's own marketplace and install it from there:
    ```
-   /plugin install coronium-mobile-proxies --marketplace coroniumio/coronium-proxy-mcp
+   /plugin marketplace add coroniumio/coronium-proxy-mcp
+   /plugin install coronium-mobile-proxies@coronium
    ```
    For local testing, run `claude --plugin-dir ./plugins/coronium-mobile-proxies` from a clone of this repository.
 2. Create your API token in the Coronium dashboard: https://dashboard.coronium.io, then Account -> API Access.
@@ -43,7 +44,7 @@ Rotation waits for the carrier to hand out a new IP, which can take a minute or 
 
 The plugin declares one local MCP server. Claude Code starts it with `npx -y coronium-proxy-mcp@2.1.0`, which downloads that exact, pinned version from the npm registry and runs it on your computer over stdio. Source code: https://github.com/coroniumio/coronium-proxy-mcp.
 
-The server runs in its `directory` profile. In this profile it has no tools that buy, renew, top up, cancel or refund, no login tool, and no tool that accepts a password or token typed into the chat.
+The server runs in its `directory` profile. In this profile it has no tools that buy, renew, top up, cancel or refund, and no login tool. No tool asks for your Coronium account password or API token in the chat; the token comes only from the plugin setting.
 
 ## What it will not do
 
@@ -53,7 +54,7 @@ The server runs in its `directory` profile. In this profile it has no tools that
 
 ## Data handling
 
-- The server sends requests only to `https://api.coronium.io/api/v3`, operated by Coronium, using your API token. The address is fixed in the plugin configuration.
+- The server sends requests only to `https://api.coronium.io`, operated by Coronium: the customer API at `/api/v3` with your API token, and the public plan catalogue at `/api/v1/tariffs` without it. The address is fixed in the plugin configuration.
 - The only other network traffic is `npx` downloading the pinned package from registry.npmjs.org when the server starts.
 - With your token it reads your Coronium account details, balance, owned proxies and their connection credentials, plans and prices, and your support tickets. It sends only what you ask for, such as a rotation request or the text of a ticket.
 - Nothing is stored by the plugin. The server keeps data in memory while it runs and writes no files. Your token is held by Claude Code as a sensitive setting, not by the plugin.
