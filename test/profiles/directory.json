@@ -1,0 +1,23 @@
+[
+  "coronium_check_token",
+  "coronium_create_ticket",
+  "coronium_get_account",
+  "coronium_get_balance",
+  "coronium_get_capabilities",
+  "coronium_get_openvpn_config",
+  "coronium_get_proxies",
+  "coronium_get_proxy",
+  "coronium_get_proxy_health",
+  "coronium_get_renewal_quote",
+  "coronium_get_rotation_status",
+  "coronium_get_ticket",
+  "coronium_get_webhook",
+  "coronium_list_countries",
+  "coronium_list_free_modems",
+  "coronium_list_tariffs",
+  "coronium_list_tickets",
+  "coronium_replace_modem",
+  "coronium_reply_to_ticket",
+  "coronium_rotate_modem",
+  "coronium_test_modem"
+]

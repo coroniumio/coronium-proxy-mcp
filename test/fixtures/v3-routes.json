@@ -1,0 +1,3503 @@
+{
+  "description": "Public Coronium /api/v3 route list for client contract tests: method, path, auth and public field shapes only.",
+  "base_path": "/api/v3",
+  "observed": "2026-10-17",
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/signup",
+      "auth": "public",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "login",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "company_name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "purpose",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "inviteLinkToken",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error",
+            "message"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/get-token",
+      "auth": "public",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "login",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "token"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/check-token",
+      "auth": "public",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "token",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "token"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error",
+            "code"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/wallet-challenge",
+      "auth": "public",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "wallet_address",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "voucher",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "message",
+            "nonce",
+            "expires_in_s"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 410,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/wallet-signup",
+      "auth": "public",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "wallet_address",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "voucher",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "signature",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "api_token",
+            "user_id",
+            "wallet_address",
+            "balance_usd"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 410,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/countries",
+      "auth": "public",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/tariffs",
+      "auth": "public",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/tariffs/available",
+      "auth": "public",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data",
+            "_cached",
+            "_ageMs"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/free-modems",
+      "auth": "public",
+      "path_params": [],
+      "query": [
+        {
+          "name": "country_id",
+          "type": "object_id",
+          "required": false
+        },
+        {
+          "name": "carrier_id",
+          "type": "object_id",
+          "required": false
+        },
+        {
+          "name": "region_id",
+          "type": "object_id",
+          "required": false
+        },
+        {
+          "name": "isShared",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "rotationInterval",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "period",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/modems/rotate-modem-by-token/:token",
+      "auth": "public",
+      "path_params": [
+        "token"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "message",
+            "ext_ip",
+            "new_ip"
+          ]
+        },
+        {
+          "status": 502,
+          "fields": [
+            "result",
+            "code",
+            "error",
+            "ext_ip"
+          ]
+        },
+        {
+          "status": 202,
+          "fields": [
+            "result",
+            "accepted",
+            "rotated",
+            "pending",
+            "state",
+            "provider",
+            "started_at",
+            "retry_after_seconds",
+            "status_url",
+            "message"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 403,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/modems/get-rotating-modem-status-by-token/:token",
+      "auth": "public",
+      "path_params": [
+        "token"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 403,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/account",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "_id",
+            "name",
+            "login",
+            "btc",
+            "usdt",
+            "accountCredit",
+            "proxyCount"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/account/card-list",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/account/proxies",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error",
+            "data"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/account/crypto-balance",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "coin",
+            "balance",
+            "address"
+          ],
+          "array": true
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/account/proxies/health",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "modems",
+            "summary",
+            "generated_at_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/account/subscriptions",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "subscriptions",
+            "count",
+            "generated_at_ms"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/account/payments",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/account/low-balance-threshold",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "thresholds",
+            "allowed",
+            "notifiedAt"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/account/low-balance-threshold",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "thresholds",
+          "type": "array",
+          "required": false
+        },
+        {
+          "name": "threshold",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "thresholds"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error",
+            "allowed"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/payment/renewal-quote",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "modems",
+          "type": "array",
+          "required": false
+        },
+        {
+          "name": "basket",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "coupon",
+          "type": "string|object",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "currency",
+            "subtotal_usd",
+            "discount_usd",
+            "total_usd",
+            "total_cents",
+            "coupon",
+            "line_items"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error",
+            "code"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/payment/buy-with-card/:card_id",
+      "auth": "bearer",
+      "path_params": [
+        "card_id"
+      ],
+      "query": [],
+      "body": [
+        {
+          "name": "tariff_id",
+          "type": "object_id",
+          "required": false
+        },
+        {
+          "name": "modemCount",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "modems",
+          "type": "array",
+          "required": false
+        },
+        {
+          "name": "coupon",
+          "type": "string|object",
+          "required": false
+        },
+        {
+          "name": "metadata",
+          "type": "string|object",
+          "required": false
+        },
+        {
+          "name": "wantP0f",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "autoRenew",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "region_id",
+          "type": "object_id",
+          "required": false
+        },
+        {
+          "name": "isShared",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "rotationInterval",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "basket",
+          "type": "object",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 202,
+          "fields": [
+            "message",
+            "proxies",
+            "paymentId"
+          ]
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error",
+            "code",
+            "paymentId"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 402,
+          "fields": []
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/payment/renew-with-card/:card_id",
+      "auth": "bearer",
+      "path_params": [
+        "card_id"
+      ],
+      "query": [],
+      "body": [
+        {
+          "name": "tariff_id",
+          "type": "object_id",
+          "required": false
+        },
+        {
+          "name": "modemCount",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "modems",
+          "type": "array",
+          "required": false
+        },
+        {
+          "name": "coupon",
+          "type": "string|object",
+          "required": false
+        },
+        {
+          "name": "metadata",
+          "type": "string|object",
+          "required": false
+        },
+        {
+          "name": "wantP0f",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "autoRenew",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "region_id",
+          "type": "object_id",
+          "required": false
+        },
+        {
+          "name": "isShared",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "rotationInterval",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "basket",
+          "type": "object",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 202,
+          "fields": [
+            "message",
+            "proxies",
+            "paymentId"
+          ]
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error",
+            "code",
+            "paymentId"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 402,
+          "fields": []
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/payment/buy-modems-with-crypto-balance",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "tariff_id",
+          "type": "object_id",
+          "required": false
+        },
+        {
+          "name": "modemCount",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "modems",
+          "type": "array",
+          "required": false
+        },
+        {
+          "name": "coupon",
+          "type": "string|object",
+          "required": false
+        },
+        {
+          "name": "metadata",
+          "type": "string|object",
+          "required": false
+        },
+        {
+          "name": "wantP0f",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "autoRenew",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "basket",
+          "type": "object",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "charged_usd",
+            "currency",
+            "data",
+            "billing",
+            "webhook"
+          ]
+        },
+        {
+          "status": 202,
+          "fields": [
+            "message",
+            "paymentId"
+          ]
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error",
+            "code",
+            "paymentId"
+          ]
+        },
+        {
+          "status": 200,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error",
+            "required",
+            "available"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": []
+        },
+        {
+          "status": 404,
+          "fields": []
+        },
+        {
+          "status": 429,
+          "fields": []
+        },
+        {
+          "status": 503,
+          "fields": []
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/payment/renew-modems-with-crypto-balance",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "modems",
+          "type": "array",
+          "required": false
+        },
+        {
+          "name": "basket",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "coupon",
+          "type": "string|object",
+          "required": false
+        },
+        {
+          "name": "tariff_id",
+          "type": "object_id",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "charged_usd",
+            "currency",
+            "data",
+            "billing",
+            "webhook"
+          ]
+        },
+        {
+          "status": 202,
+          "fields": [
+            "message",
+            "paymentId"
+          ]
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error",
+            "code",
+            "paymentId"
+          ]
+        },
+        {
+          "status": 200,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error",
+            "required",
+            "available"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": []
+        },
+        {
+          "status": 404,
+          "fields": []
+        },
+        {
+          "status": 429,
+          "fields": []
+        },
+        {
+          "status": 503,
+          "fields": []
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/payment/buy-with-account-credit",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "tariff_id",
+          "type": "object_id",
+          "required": false
+        },
+        {
+          "name": "modemCount",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "modems",
+          "type": "array",
+          "required": false
+        },
+        {
+          "name": "coupon",
+          "type": "string|object",
+          "required": false
+        },
+        {
+          "name": "metadata",
+          "type": "string|object",
+          "required": false
+        },
+        {
+          "name": "wantP0f",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "autoRenew",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "basket",
+          "type": "object",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "charged_usd",
+            "currency",
+            "data",
+            "billing",
+            "webhook"
+          ]
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error",
+            "code",
+            "restocking",
+            "refunded",
+            "refund_amount",
+            "balance_after",
+            "details",
+            "retry_after_seconds"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error",
+            "code",
+            "available_usd",
+            "required_usd"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error",
+            "code",
+            "modem_id",
+            "payment_id",
+            "retry_after_seconds"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": [
+            "error",
+            "code",
+            "modem_id",
+            "renewals_last_10min",
+            "retry_after_seconds"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": [
+            "error",
+            "code",
+            "retry_after_seconds"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": []
+        },
+        {
+          "status": 400,
+          "fields": []
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error",
+            "code"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/payment/renew-with-account-credit",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "modems",
+          "type": "array",
+          "required": false
+        },
+        {
+          "name": "basket",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "coupon",
+          "type": "string|object",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "charged_usd",
+            "currency",
+            "data",
+            "billing",
+            "webhook"
+          ]
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error",
+            "code",
+            "restocking",
+            "refunded",
+            "refund_amount",
+            "balance_after",
+            "details",
+            "retry_after_seconds"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error",
+            "code",
+            "available_usd",
+            "required_usd"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error",
+            "code",
+            "modem_id",
+            "payment_id",
+            "retry_after_seconds"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": [
+            "error",
+            "code",
+            "modem_id",
+            "renewals_last_10min",
+            "retry_after_seconds"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": [
+            "error",
+            "code",
+            "retry_after_seconds"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": []
+        },
+        {
+          "status": 400,
+          "fields": []
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error",
+            "code"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/payments/:id/status",
+      "auth": "bearer",
+      "path_params": [
+        "id"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "_id",
+            "status",
+            "isConfirmed",
+            "createdAt",
+            "lastError",
+            "modems"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/coupons/check",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "coupon_name",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/modems/:modem_id/restart",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "rotated",
+            "ip",
+            "message"
+          ]
+        },
+        {
+          "status": 202,
+          "fields": [
+            "result",
+            "accepted",
+            "rotated",
+            "pending",
+            "state",
+            "provider",
+            "started_at",
+            "retry_after_seconds",
+            "status_url",
+            "message",
+            "ip"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": [
+            "error",
+            "code",
+            "last_rotation",
+            "retry_after_seconds"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": []
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/modems/:modem_id/rotation-status",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "modemId",
+            "name",
+            "state",
+            "ext_ip",
+            "rotated_at",
+            "reset_started",
+            "reset_error",
+            "elapsedMs",
+            "hint",
+            "command_id"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/modems/:modem_id/set-rotation-interval",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [
+        {
+          "name": "rotation_interval",
+          "type": "integer",
+          "required": true
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "data"
+          ]
+        },
+        {
+          "status": 200,
+          "fields": []
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": []
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/modems/:modem_id/set-os",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [
+        {
+          "name": "os",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "data"
+          ]
+        },
+        {
+          "status": 202,
+          "fields": []
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error",
+            "code",
+            "allowed",
+            "hint"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": [
+            "error",
+            "retry_after_seconds",
+            "last_changed_at"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 502,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/modems/:modem_id/p0f-options",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "data"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/modems/:modem_id/set-metadata",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [
+        {
+          "name": "metadata",
+          "type": "string|object",
+          "required": true
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/modems/:modem_id/change-password",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [
+        {
+          "name": "proxy_password",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "required": false
+        },
+        {
+          "name": "credential_version",
+          "type": "number",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "applied",
+            "verified",
+            "warning",
+            "data"
+          ]
+        },
+        {
+          "status": 202,
+          "fields": []
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/modems/:modem_id/apply-settings",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "applied",
+            "detail"
+          ]
+        },
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "applied",
+            "warning"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error",
+            "message"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/modems/:modem_id/test",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 201,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 201,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 200,
+          "fields": [
+            "error",
+            "message",
+            "requestTime"
+          ]
+        },
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": []
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/modems/:modem_id/replace",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "oldModemId",
+            "newModemId",
+            "newModem"
+          ]
+        },
+        {
+          "status": 200,
+          "fields": [
+            "result"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error",
+            "message"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/modems/:modem_id/cancel",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [
+        {
+          "name": "reason",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "dryRun",
+            "cancelled",
+            "modemId",
+            "modemName",
+            "refundAmount",
+            "hoursUsed",
+            "totalHours",
+            "pricePerHour",
+            "originalPrice",
+            "priceBasis",
+            "originalDays",
+            "subscriptionStart",
+            "subscriptionEnd",
+            "message"
+          ]
+        },
+        {
+          "status": 200,
+          "fields": [
+            "cancelled",
+            "modemId",
+            "modemName",
+            "refundAmount",
+            "refundedTo",
+            "hoursUsed",
+            "totalHours",
+            "pricePerHour",
+            "originalPrice",
+            "message"
+          ]
+        },
+        {
+          "status": 200,
+          "fields": [
+            "cancelled",
+            "modemId",
+            "modemName",
+            "refundAmount",
+            "hoursUsed",
+            "totalHours",
+            "message"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error",
+            "code",
+            "suggested_action",
+            "cancelled"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/modems/:modem_id/openvpn",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [
+        {
+          "name": "proto",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [],
+          "content": "text"
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 502,
+          "fields": [
+            "error",
+            "code"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/modems/:modem_id/openvpn/revoke",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "cleanupConfirmed"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/modems/:modem_id/set-white-list",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [
+        {
+          "name": "white_list",
+          "type": "array",
+          "required": true
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "data"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": []
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/modems/:modem_id/usage",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [
+        {
+          "name": "days",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "data"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": []
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/modems/:modem_id/speed-test",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 202,
+          "fields": [
+            "result",
+            "data"
+          ]
+        },
+        {
+          "status": 200,
+          "fields": []
+        },
+        {
+          "status": 404,
+          "fields": []
+        },
+        {
+          "status": 429,
+          "fields": []
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/modems/:modem_id/speed-test",
+      "auth": "bearer",
+      "path_params": [
+        "modem_id"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result",
+            "data"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": []
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/tickets",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [
+        {
+          "name": "status",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/tickets",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "subject",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "category",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "relatedProxies",
+          "type": "array",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 201,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": [
+            "error",
+            "retryAfter"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/tickets/:id",
+      "auth": "bearer",
+      "path_params": [
+        "id"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/tickets/:id/reply",
+      "auth": "bearer",
+      "path_params": [
+        "id"
+      ],
+      "query": [],
+      "body": [
+        {
+          "name": "message",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": [
+            "error",
+            "retryAfter"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/tickets/:id/archive",
+      "auth": "bearer",
+      "path_params": [
+        "id"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "result"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/wallet-key/rotate-challenge",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "message",
+            "nonce",
+            "expires_in_s"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/wallet-key/rotate",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "message",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "signature",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "api_token"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 410,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/account/webhook",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "webhook_url",
+            "enabled",
+            "auto_replace_dead_proxies",
+            "secret",
+            "signing",
+            "signature",
+            "events"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/account/webhook",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "webhook_url",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "webhook_url",
+            "enabled",
+            "auto_replace_dead_proxies",
+            "secret",
+            "signing",
+            "signature",
+            "events"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error",
+            "code",
+            "reason"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/account/webhook",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "webhook_url",
+            "enabled",
+            "auto_replace_dead_proxies",
+            "secret",
+            "signing",
+            "signature",
+            "events"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/account/webhook/secret/rotate",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "secret",
+            "preview",
+            "created_at",
+            "rotated",
+            "signing",
+            "warning",
+            "effect",
+            "signature"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": []
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/account/webhook/test",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "delivered",
+            "url",
+            "event_id",
+            "status_code",
+            "latency_ms",
+            "error",
+            "response_preview",
+            "signed",
+            "signed_with",
+            "signature_header",
+            "hint"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/account/pool-keys",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/account/pool-keys/:id/proxy-url",
+      "auth": "bearer",
+      "path_params": [
+        "id"
+      ],
+      "query": [],
+      "body": [
+        {
+          "name": "country",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pool",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "rotation",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "protocol",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "carrier",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "city",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "sid",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "sessionPrefix",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "sessionMode",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "failover",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "ipType",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "asn",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "isp",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "ttl",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "strict",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "url",
+            "host",
+            "protocol"
+          ]
+        },
+        {
+          "status": 200,
+          "fields": [
+            "urls",
+            "sessionIds",
+            "count",
+            "sessionPrefix",
+            "sessionMode",
+            "host",
+            "protocol"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/payment/buy-pool-with-account-credit",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "tariff_id",
+          "type": "object_id",
+          "required": true
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "pool_key_id",
+            "pak_id",
+            "traffic_cap_gb",
+            "expires_at",
+            "label",
+            "balance_usd_remaining"
+          ]
+        },
+        {
+          "status": 402,
+          "fields": [
+            "error",
+            "needed_usd",
+            "have_usd"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 502,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/account/pool-keys/:id/topup",
+      "auth": "bearer",
+      "path_params": [
+        "id"
+      ],
+      "query": [],
+      "body": [
+        {
+          "name": "tariff_id",
+          "type": "object_id",
+          "required": true
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "pool_key_id",
+            "pak_id",
+            "traffic_cap_gb",
+            "expires_at",
+            "balance_usd_remaining"
+          ]
+        },
+        {
+          "status": 402,
+          "fields": [
+            "error",
+            "needed_usd",
+            "have_usd"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 429,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 502,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/account/pool-keys/:id/cancel",
+      "auth": "bearer",
+      "path_params": [
+        "id"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "cancelled",
+            "pool_key_id",
+            "refunded_usd"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 502,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/pool/stock",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "updatedAt",
+            "countries"
+          ]
+        },
+        {
+          "status": 502,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/pool/stock/carriers/:country",
+      "auth": "bearer",
+      "path_params": [
+        "country"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "country",
+            "pool",
+            "carriers",
+            "named",
+            "namedTotal",
+            "other",
+            "total",
+            "mobile",
+            "residential",
+            "updatedAt",
+            "cached"
+          ]
+        },
+        {
+          "status": 200,
+          "fields": [
+            "country",
+            "carriers",
+            "total",
+            "named",
+            "unavailable"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/account/pool/sessions",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "sessions",
+            "count",
+            "generatedAt",
+            "cached",
+            "throttled"
+          ]
+        },
+        {
+          "status": 502,
+          "fields": [
+            "error",
+            "requestId"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/account/pool/sessions/:sessionKey",
+      "auth": "bearer",
+      "path_params": [
+        "sessionKey"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": []
+        },
+        {
+          "status": 403,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 502,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/account/pool/sessions",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "success",
+            "count"
+          ]
+        },
+        {
+          "status": 502,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/account/pool/saved",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/account/pool/saved",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "poolKeyId",
+          "type": "object_id",
+          "required": true
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "params",
+          "type": "object",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "id",
+            "label",
+            "poolKeyId",
+            "params",
+            "last_used_at",
+            "createdAt"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/account/pool/saved/:id",
+      "auth": "bearer",
+      "path_params": [
+        "id"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "success",
+            "id"
+          ]
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/account/pool/saved/:id/url",
+      "auth": "bearer",
+      "path_params": [
+        "id"
+      ],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": []
+        },
+        {
+          "status": 404,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    }
+  ],
+  "non_v3_routes": [
+    {
+      "method": "GET",
+      "path": "/api/v1/tariffs",
+      "auth": "public",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        }
+      ]
+    }
+  ]
+}

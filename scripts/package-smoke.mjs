@@ -34,7 +34,7 @@ try {
     client = new Client({name: 'package-smoke', version: '1.0.0'});
     const transport = new StdioClientTransport({command: process.execPath, args: [entry], cwd: install, stderr: 'pipe', env: {
         PATH: process.env.PATH, HOME: temporary, DOTENV_CONFIG_PATH: join(temporary, 'absent.env'), CORONIUM_API_TOKEN: 'package-fixture-token',
-        CORONIUM_BASE_URL: `http://127.0.0.1:${backend.address().port}/api/v3`, CORONIUM_READ_ONLY: 'true',
+        CORONIUM_BASE_URL: `http://127.0.0.1:${backend.address().port}/api/v3`, CORONIUM_TOOL_PROFILE: 'directory', CORONIUM_ENABLE_SPENDING: '1',
     }});
     let stderr = ''; transport.stderr?.on('data', chunk => {stderr += chunk;});
     await client.connect(transport);
@@ -42,6 +42,8 @@ try {
     const {tools} = await client.listTools();
     assert(tools.some(tool => tool.name === 'coronium_get_balance'));
     assert(!tools.some(tool => tool.name === 'coronium_buy_modems_with_balance'));
+    assert(!tools.some(tool => tool.name === 'coronium_login'));
+    assert.equal(tools.length, 21);
     const result = await client.callTool({name: 'coronium_get_balance', arguments: {}});
     assert.notEqual(result.isError, true);
     assert.equal(result.structuredContent.data.account_credit.amount, 99);

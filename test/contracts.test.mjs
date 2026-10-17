@@ -18,6 +18,7 @@ process.env.CORONIUM_API_TOKEN = 'fixture-token';
 const ids = {modem: '111111111111111111111111', second: 'aaaaaaaaaaaaaaaaaaaaaaaa', country: '222222222222222222222222', tariff: '333333333333333333333333', pool: '444444444444444444444444', key: '555555555555555555555555', ticket: '666666666666666666666666', saved: '777777777777777777777777'};
 const proxy = {_id: ids.modem, name: 'cor_US_fixture', country_id: ids.country, connection_ip: '203.0.113.8', http_port: 18080, socks_port: 18081, proxy_login: 'name@user', proxy_password: 'p:a/ss', isOnline: true, tariff_expired_at: Date.now() + 86400_000, restartToken: '123e4567-e89b-42d3-a456-426614174000', features: {p0f: {server_supported: false}, openvpn: {available: false}}};
 let requests = [];
+const allRequests = [];
 let overrides = new Map();
 let connections = [];
 function json(res, value, status = 200, headers = {}) {res.writeHead(status, {'Content-Type': 'application/json', ...headers}); res.end(JSON.stringify(value));}
@@ -29,6 +30,7 @@ const backend = createHttpServer(async (req, res) => {
     const path = url.pathname.replace(/^\/api\/v3/, '');
     const record = {method: req.method, path, query: Object.fromEntries(url.searchParams), body, headers: req.headers};
     requests.push(record);
+    allRequests.push(record);
     const override = overrides.get(`${req.method} ${path}`);
     if (override) return override(req, res, record);
     const isPublic = ['/countries', '/tariffs/available', '/free-modems', '/get-token', '/api/v1/tariffs'].includes(path) || path.startsWith('/modems/rotate-modem-by-token/');
@@ -41,6 +43,8 @@ const backend = createHttpServer(async (req, res) => {
     if (path === '/free-modems') return json(res, {data: [{country_id: ids.country, carrier_id: ids.second, count: 8}]});
     if (path === '/account/proxies') return json(res, {data: [proxy]});
     if (path === '/account/crypto-balance') return json(res, [{coin: 'btc', balance: 0.003, address: 'fixture-address'}, {coin: 'usdt', balance: 17}, {coin: 'account_credit', balance: 320}]);
+    if (path === '/coupons/check') return json(res, {data: {discount: body.coupon_name === 'SAVE' ? '10%' : 0}});
+    if (/^\/modems\/[a-f0-9]{24}\/cancel$/.test(path)) return json(res, body?.dryRun === true ? {dryRun: true, cancelled: false, refundAmount: 12.5} : {cancelled: true, refundAmount: 12.5, refundedTo: 'account_credit'});
     if (path === '/payment/renewal-quote') return json(res, {currency: 'USD', total_usd: 129, total_cents: 12900, line_items: body.modems.map(modem => ({modem_id: modem.modem_id, days: modem.days, usd: 129}))});
     if (path === '/account/pool-keys') return json(res, {data: [{_id: ids.key, traffic_cap_gb: 10, traffic_used_gb: 2.25, traffic_synced_at: 1234, sync_stale_minutes: 2, status: 'active'}]});
     if (path === '/tickets' && req.method === 'GET') return json(res, {data: {tickets: [{_id: ids.ticket, subject: 'Fixture', status: 'pending'}], total: 7, limit: Number(record.query.limit), offset: Number(record.query.offset)}});
@@ -60,7 +64,11 @@ const {config} = await import('../dist/config.js');
 const {api, CoroniumAPI} = await import('../dist/api-client.js');
 const {tokenStore} = await import('../dist/token-store.js');
 const {proxyUrl, finiteNumber} = await import('../dist/formatters.js');
-const {redact} = await import('../dist/errors.js');
+const {redact, normalizeErrorCode} = await import('../dist/errors.js');
+const {resolveBaseUrl, DEFAULT_BASE_URL} = await import('../dist/config.js');
+const {toolDefinitions} = await import('../dist/tool.js');
+const {DIRECTORY_TOOLS} = await import('../dist/profiles.js');
+const routeFixture = JSON.parse(readFileSync(new URL('./fixtures/v3-routes.json', import.meta.url), 'utf8'));
 
 async function connect() {
     const server = createServer();
@@ -77,15 +85,15 @@ async function call(name, args = {}, client) {
 function data(result) {assert.notEqual(result.isError, true, JSON.stringify(result)); assert.deepEqual(JSON.parse(result.content[0].text), result.structuredContent); return result.structuredContent.data;}
 function error(result, code) {assert.equal(result.isError, true); if (code) assert.equal(result.structuredContent?.error?.code, code); return result.structuredContent?.error;}
 function last(path) {return requests.filter(request => request.path === path).at(-1);}
-beforeEach(() => {requests = []; overrides = new Map(); config.readOnly = false; config.login = undefined; config.password = undefined; config.autoLoginOn401 = true; config.tokenEncryptionKey = undefined; config.timeoutMs = 30_000; config.actionTimeoutMs = 180_000; tokenStore.set('fixture-token');});
+beforeEach(() => {requests = []; overrides = new Map(); config.readOnly = false; config.profile = 'full'; config.spendingEnabled = true; config.login = undefined; config.password = undefined; config.autoLoginOn401 = true; config.tokenEncryptionKey = undefined; config.timeoutMs = 30_000; config.actionTimeoutMs = 180_000; tokenStore.set('fixture-token');});
 afterEach(async () => {await Promise.all(connections.splice(0).map(async ({client, server}) => {await client.close(); await server.close();}));});
 after(async () => {await new Promise(resolve => backend.close(resolve)); rmSync(home, {recursive: true, force: true});});
 
 test('MCP initialization, all tool schemas, annotations, resources and prompts', async () => {
     const client = await connect();
-    assert.equal(client.getServerVersion().version, '2.0.0');
+    assert.equal(client.getServerVersion().version, '2.1.0');
     const {tools} = await client.listTools();
-    assert.equal(tools.length, 59);
+    assert.equal(tools.length, 66);
     assert.equal(new Set(tools.map(tool => tool.name)).size, tools.length);
     for (const tool of tools) {
         assert.equal(tool.inputSchema.type, 'object', tool.name);
@@ -93,6 +101,7 @@ test('MCP initialization, all tool schemas, annotations, resources and prompts',
         assert.equal(tool.outputSchema.type, 'object', tool.name);
         assert.equal(typeof tool.annotations.readOnlyHint, 'boolean');
         assert.equal(typeof tool.annotations.destructiveHint, 'boolean');
+        assert.equal(typeof tool.annotations.title, 'string');
         assert.equal(tool.annotations.openWorldHint, true);
     }
     const cancellation = tools.find(tool => tool.name === 'coronium_cancel_modem');
@@ -100,7 +109,7 @@ test('MCP initialization, all tool schemas, annotations, resources and prompts',
     assert.equal(cancellation.annotations.destructiveHint, true);
     assert(cancellation.inputSchema.required.includes('confirm'));
     assert.equal((await client.listResources()).resources.length, 1);
-    assert.match((await client.readResource({uri: 'coronium://guide'})).contents[0].text, /never automatically retries a write/);
+    assert.match((await client.readResource({uri: 'coronium://guide'})).contents[0].text, /Never repeat a write automatically/);
     assert.equal((await client.listPrompts()).prompts.length, 2);
     assert.match((await client.getPrompt({name: 'choose-proxy', arguments: {requirements: 'US SOCKS5'}})).messages[0].content.text, /US SOCKS5/);
     assert.equal(data(await call('get_capabilities', {}, client)).read_only, false);
@@ -159,7 +168,7 @@ test('malformed country lookup is an error, not a false empty proxy list', async
 
 test('purchase uses account credit and the real body, preserving full billing receipt', async () => {
     const key = randomUUID();
-    const result = data(await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 2, funding_source: 'account_credit', country_code: 'us', coupon: 'SAVE', metadata: {job: 'fixture'}, want_p0f: false, confirm: true, idempotency_key: key}));
+    const result = data(await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 2, funding_source: 'account_credit', country_code: 'us', coupon: 'SAVE', metadata: {job: 'fixture'}, want_p0f: false, expected_total_usd: 232.2, confirm: true, idempotency_key: key}));
     const request = last('/payment/buy-with-account-credit');
     assert.deepEqual(request.body, {tariff_id: ids.tariff, modemCount: 2, coupon: {coupon_name: 'SAVE'}, metadata: '{"job":"fixture"}', wantP0f: false});
     assert.equal(request.headers['idempotency-key'], key);
@@ -167,22 +176,24 @@ test('purchase uses account credit and the real body, preserving full billing re
     assert.equal(result.request.idempotency_key, key);
     assert.equal(result.request.request_id, 'fixture-request');
     assert.equal(result.request.replayed, false);
+    assert.equal(result.delivery.delivery_verified, false);
+    assert.match(result.delivery.next_step, /get_payments/);
 });
 
 test('BTC purchase selects BTC route, not USD credit', async () => {
-    data(await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'btc', confirm: true, idempotency_key: randomUUID()}));
+    data(await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'btc', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}));
     assert(last('/payment/buy-modems-with-crypto-balance'));
     assert(!last('/payment/buy-with-account-credit'));
 });
 
 test('buy rejects missing authorization, unsupported inputs and key before HTTP', async () => {
-    const valid = {tariff_id: ids.tariff, quantity: 1, confirm: true, idempotency_key: randomUUID()};
-    for (const args of [{...valid, confirm: false}, {...valid, confirm: undefined}, {...valid, idempotency_key: undefined}, {...valid, funding_source: 'usdt'}, {...valid, unexpected: 'ignored?'}, {...valid, quantity: 0}]) error(await call('buy_modems_with_balance', args));
+    const valid = {tariff_id: ids.tariff, quantity: 1, funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()};
+    for (const args of [{...valid, funding_source: undefined}, {...valid, expected_total_usd: undefined}, {...valid, confirm: false}, {...valid, confirm: undefined}, {...valid, idempotency_key: undefined}, {...valid, funding_source: 'usdt'}, {...valid, unexpected: 'ignored?'}, {...valid, quantity: 0}]) error(await call('buy_modems_with_balance', args));
     assert.equal(requests.length, 0);
 });
 
 test('country and quantity preflight failures do not spend', async () => {
-    const args = {tariff_id: ids.tariff, quantity: 1, confirm: true, idempotency_key: randomUUID()};
+    const args = {tariff_id: ids.tariff, quantity: 1, funding_source: 'account_credit', expected_total_usd: 2000, confirm: true, idempotency_key: randomUUID()};
     error(await call('buy_modems_with_balance', {...args, country_code: 'PL'}), 'tariff_unavailable');
     error(await call('buy_modems_with_balance', {...args, quantity: 9}), 'insufficient_stock');
     assert(requests.every(request => request.method === 'GET'));
@@ -190,16 +201,16 @@ test('country and quantity preflight failures do not spend', async () => {
 
 test('renewal quote and checkout use modem IDs/days, normalize IDs and omit tariff', async () => {
     const modems = [{modem_id: ids.second.toUpperCase(), days: 30}];
-    const result = data(await call('renew_modems_with_balance', {modems, coupon: 'SAVE', confirm: true, idempotency_key: randomUUID()}));
+    const result = data(await call('renew_modems_with_balance', {modems, coupon: 'SAVE', funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}));
     assert.equal(result.quote_before_submission.total_usd, 129);
     assert.deepEqual(last('/payment/renew-with-account-credit').body, {modems: [{modem_id: ids.second, days: 30}], coupon: {coupon_name: 'SAVE'}});
     assert(!('tariff_id' in last('/payment/renew-with-account-credit').body));
-    data(await call('renew_modems_with_balance', {modems, funding_source: 'btc', confirm: true, idempotency_key: randomUUID()}));
+    data(await call('renew_modems_with_balance', {modems, funding_source: 'btc', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}));
     assert(last('/payment/renew-modems-with-crypto-balance'));
 });
 
 test('partial ownership quote and duplicate modem IDs block renewal', async () => {
-    const args = {modems: [{modem_id: ids.modem, days: 30}, {modem_id: ids.second, days: 7}], confirm: true, idempotency_key: randomUUID()};
+    const args = {modems: [{modem_id: ids.modem, days: 30}, {modem_id: ids.second, days: 7}], funding_source: 'account_credit', expected_total_usd: 500, confirm: true, idempotency_key: randomUUID()};
     overrides.set('POST /payment/renewal-quote', (_, res) => json(res, {total_usd: 129, line_items: [{modem_id: ids.modem}]}));
     error(await call('renew_modems_with_balance', args), 'incomplete_renewal_quote');
     assert.equal(requests.length, 1);
@@ -229,7 +240,7 @@ test('same concurrent payment intent is submitted once; payload or route reuse i
 test('HTTP 401 insufficient BTC never triggers login or write replay', async () => {
     config.login = 'fixture@example.invalid'; config.password = 'fixture-password';
     overrides.set('POST /payment/buy-modems-with-crypto-balance', (_, res) => json(res, {error: 'Insufficient balance', required: 0.02, available: 0.001}, 401));
-    const result = await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'btc', confirm: true, idempotency_key: randomUUID()});
+    const result = await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'btc', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()});
     const detail = error(result, 'http_401');
     assert.equal(detail.details.available, 0.001);
     assert.equal(requests.filter(request => request.method === 'POST').length, 1);
@@ -285,20 +296,27 @@ test('ownership is checked before modem mutations, even when passed a raw ID', a
 });
 
 test('rotation returns verified success and preserves actual done status', async () => {
-    assert.equal(data(await call('restart_modem', {proxy: ids.modem, confirm: true})).response.rotated, true);
+    const done = data(await call('restart_modem', {proxy: ids.modem, confirm: true}));
+    assert.equal(done.state, 'done');
+    assert.equal(done.ip, '203.0.113.9');
     assert.equal(data(await call('get_rotation_status', {proxy: ids.modem})).response.state, 'done');
     data(await call('rotate_modem', {proxy_identifier: proxy.name, confirm: true}));
     assert.equal(requests.filter(request => request.path.endsWith('/restart')).length, 2);
 });
 
-test('HTTP 200 rotated:false is a tool failure, never reported queued or completed', async () => {
-    overrides.set(`POST /modems/${ids.modem}/restart`, (_, res) => json(res, {rotated: false, ip: '203.0.113.8', message: 'IP unchanged'}));
-    error(await call('restart_modem', {proxy: ids.modem, confirm: true}), 'rotation_failed');
+test('HTTP 200 rotated:false is state unchanged, not an error and not a success', async () => {
+    overrides.set(`POST /modems/${ids.modem}/restart`, (_, res) => json(res, {result: 'ok', rotated: false, ip: '203.0.113.8', message: 'IP unchanged'}));
+    const result = data(await call('restart_modem', {proxy: ids.modem, confirm: true}));
+    assert.equal(result.state, 'unchanged');
+    assert.match(result.next_step, /60 seconds/);
     assert.equal(requests.filter(request => request.method === 'POST').length, 1);
 });
 
 test('explicit rotation token uses the v3 token route without bearer credentials', async () => {
-    data(await call('rotate_modem', {proxy_identifier: proxy.restartToken, confirm: true}));
+    // The token route's success body has no rotated field (critique B2).
+    const result = data(await call('rotate_modem', {proxy_identifier: proxy.restartToken, confirm: true}));
+    assert.equal(result.state, 'done');
+    assert.equal(result.ip, '203.0.113.9');
     assert.equal(requests.length, 1);
     assert.equal(requests[0].path, `/modems/rotate-modem-by-token/${proxy.restartToken}`);
     assert(!requests[0].headers.authorization);
@@ -334,7 +352,8 @@ test('metadata objects are serialized, per-server OS options are checked', async
 test('cancellation preview sends dryRun:true; cancellation is an explicit separate call', async () => {
     data(await call('preview_modem_cancellation', {proxy: ids.modem}));
     assert.deepEqual(last(`/modems/${ids.modem}/cancel`).body, {dryRun: true});
-    data(await call('cancel_modem', {proxy: ids.modem, reason: 'approved fixture', confirm: true}));
+    const cancelled = data(await call('cancel_modem', {proxy: ids.modem, reason: 'approved fixture', min_refund_usd: 12.5, confirm: true}));
+    assert.equal(cancelled.preview_before_submission.refundAmount, 12.5);
     assert.deepEqual(last(`/modems/${ids.modem}/cancel`).body, {reason: 'approved fixture'});
 });
 
@@ -367,13 +386,15 @@ test('pool stock and carrier routes require authentication', async () => {
 });
 
 test('pool topup requires a tariff and sends exact paid body with idempotency key', async () => {
-    error(await call('topup_pool_key', {id: ids.key, confirm: true, idempotency_key: randomUUID()}));
+    error(await call('topup_pool_key', {id: ids.key, expected_total_usd: 50, confirm: true, idempotency_key: randomUUID()}));
     assert.equal(requests.length, 0);
     const key = randomUUID();
-    data(await call('topup_pool_key', {id: ids.key, tariff_id: ids.pool, confirm: true, idempotency_key: key}));
+    data(await call('topup_pool_key', {id: ids.key, tariff_id: ids.pool, expected_total_usd: 50, confirm: true, idempotency_key: key}));
     assert.deepEqual(last(`/account/pool-keys/${ids.key}/topup`).body, {tariff_id: ids.pool});
-    assert.equal(requests[0].headers['idempotency-key'], key);
-    data(await call('buy_pool_with_balance', {tariff_id: ids.pool, confirm: true, idempotency_key: randomUUID()}));
+    assert.equal(last(`/account/pool-keys/${ids.key}/topup`).headers['idempotency-key'], key);
+    error(await call('buy_pool_with_balance', {tariff_id: ids.pool, expected_total_usd: 40, confirm: true, idempotency_key: randomUUID()}), 'price_changed');
+    assert(!last('/payment/buy-pool-with-account-credit'));
+    data(await call('buy_pool_with_balance', {tariff_id: ids.pool, expected_total_usd: 50, confirm: true, idempotency_key: randomUUID()}));
     assert.deepEqual(last('/payment/buy-pool-with-account-credit').body, {tariff_id: ids.pool});
     data(await call('cancel_pool_key', {id: ids.key, confirm: true, idempotency_key: randomUUID()}));
     assert.deepEqual(last(`/account/pool-keys/${ids.key}/cancel`).body, {});
@@ -422,7 +443,7 @@ test('ticket filters/pagination and create fields match the backend', async () =
 });
 
 test('read-only mode hides side-effecting GETs and mutations, permits pure POST previews', async () => {
-    config.readOnly = true;
+    config.readOnly = true; config.profile = 'read-only';
     const client = await connect();
     const names = (await client.listTools()).tools.map(tool => tool.name);
     for (const name of ['buy_modems_with_balance', 'cancel_modem', 'get_crypto_balance', 'list_pool_keys', 'rotate_modem', 'test_modem', 'test_webhook']) assert(!names.includes(`coronium_${name}`), name);
@@ -486,7 +507,7 @@ test('real stdio transport starts cleanly, accepts API_KEY alias and exposes val
     let stderr = ''; transport.stderr?.on('data', chunk => {stderr += chunk;});
     try {
         await client.connect(transport);
-        assert.equal(client.getServerVersion().version, '2.0.0');
+        assert.equal(client.getServerVersion().version, '2.1.0');
         assert.equal(data(await call('get_balance', {}, client)).account_credit.amount, 320);
         assert.equal(last('/account').headers.authorization, 'Bearer alias-fixture-token');
         assert.equal(stderr, '');
@@ -512,7 +533,7 @@ for (const [name, args, method, path] of [
 test('legacy HTTP 200 payment refusal is a tool error with reconciliation details', async () => {
     overrides.set('POST /payment/buy-modems-with-crypto-balance', (_, res) => json(res, {error: 'Please pay or cancel current pending payment'}));
     const key = randomUUID();
-    const result = await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'btc', confirm: true, idempotency_key: key});
+    const result = await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'btc', expected_total_usd: 129, confirm: true, idempotency_key: key});
     const detail = error(result, 'upstream_rejected');
     assert.equal(detail.status, 200);
     assert.equal(detail.idempotency_key, key);
@@ -520,7 +541,223 @@ test('legacy HTTP 200 payment refusal is a tool error with reconciliation detail
     assert.equal(requests.filter(request => request.method === 'POST').length, 1);
 });
 
-test('webhook delivery failure is not reported as a successful test', async () => {
+test('webhook delivery failure is a normal ok:false diagnostic, not a success or an unknown outcome', async () => {
     overrides.set('POST /account/webhook/test', (_, res) => json(res, {delivered: false, error: 'Connection failed', status_code: 502}));
-    error(await call('test_webhook', {confirm: true}), 'upstream_rejected');
+    const result = data(await call('test_webhook', {confirm: true}));
+    assert.equal(result.ok, false);
+    assert.equal(result.response.error, 'Connection failed');
+});
+
+// ---- 2.1.0: profiles, spending gate, route fixture, rotation and error contracts ----
+
+async function toolNames(profile, spendingEnabled) {
+    config.profile = profile; config.spendingEnabled = spendingEnabled; config.readOnly = profile === 'read-only';
+    const client = await connect();
+    return (await client.listTools()).tools.map(tool => tool.name).sort();
+}
+function expectedProfile(name) {return JSON.parse(readFileSync(new URL(`./profiles/${name}.json`, import.meta.url), 'utf8'));}
+const MONEY_TOOLS = ['buy_modems_with_balance', 'renew_modems_with_balance', 'buy_pool_with_balance', 'topup_pool_key', 'cancel_modem', 'cancel_pool_key'].map(name => `coronium_${name}`);
+
+test('each profile registers exactly its checked-in tool list', async () => {
+    assert.deepEqual(await toolNames('directory', false), expectedProfile('directory'));
+    assert.deepEqual(await toolNames('directory', true), expectedProfile('directory'));
+    assert.deepEqual(await toolNames('full', false), expectedProfile('full'));
+    assert.deepEqual(await toolNames('full', true), expectedProfile('full-spending'));
+    assert.deepEqual(await toolNames('read-only', true), expectedProfile('read-only'));
+    assert.deepEqual(expectedProfile('directory'), [...DIRECTORY_TOOLS].sort());
+});
+
+test('directory profile: no money, login, OS or wallet tools, no token argument, no spending words in the guide', async () => {
+    const names = await toolNames('directory', true);
+    assert(names.length >= 18 && names.length <= 24, String(names.length));
+    for (const name of [...MONEY_TOOLS, 'coronium_login', 'coronium_logout', 'coronium_get_p0f_options', 'coronium_set_modem_os', 'coronium_get_crypto_balance', 'coronium_set_webhook', 'coronium_get_credit_cards']) assert(!names.includes(name), name);
+    const client = await connect();
+    const checkToken = (await client.listTools()).tools.find(tool => tool.name === 'coronium_check_token');
+    assert.deepEqual(Object.keys(checkToken.inputSchema.properties ?? {}), []);
+    error(await call('check_token', {token: 'pasted-secret'}, client));
+    const guide = (await client.readResource({uri: 'coronium://guide'})).contents[0].text;
+    assert.doesNotMatch(guide, /buy_|renew_modems|topup|idempotency|expected_total|min_refund/i);
+    assert.match(guide, /dashboard\.coronium\.io/);
+    const capabilities = data(await call('get_capabilities', {}, client));
+    assert.equal(capabilities.profile, 'directory');
+    assert.equal(capabilities.spending_enabled, false);
+    assert.deepEqual(capabilities.modem_funding_sources, []);
+});
+
+test('spending stays off unless the full profile and CORONIUM_ENABLE_SPENDING are both set; the transport refuses too', async () => {
+    const names = await toolNames('full', false);
+    for (const name of MONEY_TOOLS) assert(!names.includes(name), name);
+    assert(names.includes('coronium_preview_modem_cancellation'));
+    for (const [profile, enabled] of [['full', false], ['directory', true], ['read-only', true]]) {
+        config.profile = profile; config.spendingEnabled = enabled;
+        await assert.rejects(new CoroniumAPI().payment('/payment/buy-with-account-credit', {}, randomUUID()), failure => failure.details.code === 'spending_disabled');
+    }
+    assert.equal(requests.length, 0);
+});
+
+test('every tool route exists in the shared public route fixture', () => {
+    const known = new Set([...routeFixture.routes, ...routeFixture.non_v3_routes].map(route => `${route.method} ${route.path}`));
+    assert.equal(routeFixture.routes.length, 72);
+    assert(toolDefinitions.size >= 66);
+    for (const tool of toolDefinitions.values()) {
+        if (tool.routes.length === 0) assert(['coronium_logout', 'coronium_get_capabilities'].includes(tool.name), tool.name);
+        for (const route of tool.routes) assert(known.has(route), `${tool.name}: ${route}`);
+    }
+});
+
+test('route fixture holds only method, path, auth and public field shapes', () => {
+    const text = readFileSync(new URL('./fixtures/v3-routes.json', import.meta.url), 'utf8');
+    assert.doesNotMatch(text, /defect|farmer|koef|ts-api|home\/projects|\.(js|ts):\d+|internalNotes|escalat|handler|middleware|side_effect/i);
+    for (const route of routeFixture.routes) {
+        assert.deepEqual(Object.keys(route).sort(), ['auth', 'body', 'method', 'path', 'path_params', 'query', 'responses']);
+        assert(['public', 'bearer'].includes(route.auth));
+    }
+});
+
+test('base URL is pinned to production when CORONIUM_BASE_URL is unset or empty', () => {
+    assert.equal(DEFAULT_BASE_URL, 'https://api.coronium.io/api/v3');
+    assert.equal(resolveBaseUrl(undefined), DEFAULT_BASE_URL);
+    assert.equal(resolveBaseUrl('  '), DEFAULT_BASE_URL);
+    assert.throws(() => resolveBaseUrl('http://example.invalid/api/v3'));
+    assert.throws(() => resolveBaseUrl('https://user:pass@example.invalid/api/v3'));
+});
+
+test('pending rotations (202 Node, PocketProxy accepted) are state rotating, never rotation_failed', async () => {
+    overrides.set(`POST /modems/${ids.modem}/restart`, (_, res) => json(res, {result: 'ok', rotated: false, pending: true, state: 'rotating', status_url: '/status', retry_after_seconds: 15}, 202));
+    const pending = data(await call('restart_modem', {proxy: ids.modem, confirm: true}));
+    assert.equal(pending.state, 'rotating');
+    assert.equal(pending.retry_after_seconds, 15);
+    assert.match(pending.next_step, /get_rotation_status/);
+    overrides.set(`GET /modems/rotate-modem-by-token/${proxy.restartToken}`, (_, res) => json(res, {result: 'ok', accepted: true, rotated: false, pending: true}, 202));
+    assert.equal(data(await call('rotate_modem', {proxy_identifier: proxy.restartToken, confirm: true})).state, 'rotating');
+});
+
+test('rotation cooldown 429 is rotation_cooldown with retry_after_seconds, whatever code the envelope wrote', async () => {
+    overrides.set(`POST /modems/${ids.modem}/restart`, (_, res) => json(res, {error: 'Please wait 42 more seconds to rotate.', code: 'internal_error', retry_after_seconds: 42}, 429, {'retry-after': '42'}));
+    let detail = error(await call('restart_modem', {proxy: ids.modem, confirm: true}), 'rotation_cooldown');
+    assert.equal(detail.retry_after_seconds, 42);
+    assert.equal(detail.backend_code, 'internal_error');
+    overrides.set(`POST /modems/${ids.modem}/restart`, (_, res) => json(res, {error: 'Please wait 17 more seconds to rotate...', code: 'modem_rotation_in_progress'}, 429));
+    detail = error(await call('restart_modem', {proxy: ids.modem, confirm: true}), 'rotation_cooldown');
+    assert.equal(detail.retry_after_seconds, 17);
+    assert.equal(requests.filter(request => request.method === 'POST').length, 2);
+});
+
+test('a failed token rotation (502, envelope says in progress) is rotation_failed', async () => {
+    overrides.set(`GET /modems/rotate-modem-by-token/${proxy.restartToken}`, (_, res) => json(res, {result: 'error', error: 'Rotation failed', code: 'modem_rotation_in_progress', ext_ip: '203.0.113.8'}, 502));
+    const detail = error(await call('rotate_modem', {proxy_identifier: proxy.restartToken, confirm: true}), 'rotation_failed');
+    assert.equal(detail.suggested_action, 'check_rotation_status');
+});
+
+test('uppercase backend codes are normalised and the original kept', async () => {
+    assert.equal(normalizeErrorCode('PAYMENT_IN_PROGRESS'), 'payment_in_progress');
+    assert.equal(normalizeErrorCode('CANCEL_UNSUPPORTED'), 'cancel_unsupported');
+    overrides.set('POST /payment/buy-with-account-credit', (_, res) => json(res, {error: 'Another payment is in progress.', code: 'PAYMENT_IN_PROGRESS', retry_after_seconds: 5}, 429, {'retry-after': '5'}));
+    const detail = error(await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}), 'payment_in_progress');
+    assert.equal(detail.backend_code, 'PAYMENT_IN_PROGRESS');
+    assert.equal(detail.retry_after_seconds, 5);
+});
+
+test('a synchronously refunded out-of-stock purchase is refunded_not_charged, not unknown', async () => {
+    overrides.set('POST /payment/buy-with-account-credit', (_, res) => json(res, {error: 'Out of stock', code: 'no_stock', refunded: true, refund_amount: 129, balance_after: 320, retry_after_seconds: 300}, 503));
+    const detail = error(await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}), 'no_stock');
+    assert.equal(detail.outcome, 'refunded_not_charged');
+    assert.equal(detail.retry_after_seconds, 300);
+});
+
+test('a higher current price or an unusable coupon refuses before any payment call', async () => {
+    const base = {tariff_id: ids.tariff, quantity: 2, funding_source: 'account_credit', confirm: true, idempotency_key: randomUUID()};
+    error(await call('buy_modems_with_balance', {...base, expected_total_usd: 200}), 'price_changed');
+    error(await call('buy_modems_with_balance', {...base, coupon: 'EXPIRED', expected_total_usd: 258}), 'coupon_invalid');
+    overrides.set('POST /payment/renewal-quote', (_, res, record) => json(res, {total_usd: 150, line_items: record.body.modems.map(modem => ({...modem, usd: 150}))}));
+    error(await call('renew_modems_with_balance', {modems: [{modem_id: ids.modem, days: 30}], funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}), 'price_changed');
+    overrides.set('POST /payment/renewal-quote', (_, res) => json(res, {total_usd: 20, line_items: [{modem_id: ids.modem, days: 7}]}));
+    error(await call('get_renewal_quote', {modems: [{modem_id: ids.modem, days: 30}]}), 'incomplete_renewal_quote');
+    assert(!requests.some(request => request.path.startsWith('/payment/') && request.path !== '/payment/renewal-quote'));
+});
+
+test('cancel re-runs the preview and refuses below the approved refund floor; concurrent replaces send one call', async () => {
+    error(await call('cancel_modem', {proxy: ids.modem, min_refund_usd: 20, confirm: true}), 'refund_changed');
+    assert.deepEqual(requests.filter(request => request.path.endsWith('/cancel')).map(request => request.body), [{dryRun: true}]);
+    const cancel = (await connect()).listTools().then(result => result.tools.find(tool => tool.name === 'coronium_cancel_modem'));
+    assert.match((await cancel).description, /NOT a way to stop auto-renew/);
+    requests = [];
+    overrides.set(`POST /modems/${ids.modem}/replace`, (_, res) => setTimeout(() => json(res, {result: 'ok', newModemId: ids.second}), 50));
+    const client = await connect();
+    const results = await Promise.all([call('replace_modem', {proxy: ids.modem, confirm: true}, client), call('replace_modem', {proxy: ids.modem, confirm: true}, client)]);
+    assert.equal(results.filter(result => result.isError).length, 1);
+    assert.equal(results.find(result => result.isError).structuredContent.error.code, 'modem_action_in_progress');
+    assert.equal(requests.filter(request => request.path.endsWith('/replace')).length, 1);
+});
+
+test('separate HTTP and SOCKS5 logins produce distinct URLs from proxyEndpoints', async () => {
+    const separate = {...proxy, proxyEndpoints: {credentials: 'separate-protocol-v1', http: {host: '198.51.100.4', port: 8001, username: 'h-user', password: 'h-pass'}, socks5: {host: '198.51.100.4', port: 9001, username: 's-user', password: 's-pass'}}};
+    overrides.set('GET /account/proxies', (_, res) => json(res, {data: [separate]}));
+    const result = data(await call('get_proxy', {proxy: proxy.name})).proxy;
+    assert.equal(result.http_url, 'http://h-user:h-pass@198.51.100.4:8001');
+    assert.equal(result.socks5_url, 'socks5://s-user:s-pass@198.51.100.4:9001');
+});
+
+test('ticket responses never contain support-internal fields', async () => {
+    const ticket = {_id: ids.ticket, subject: 'Fixture', status: 'open', internalNotes: [{text: 'secret-note'}], escalated: true, escalationReason: 'x', escalatedAt: 1};
+    overrides.set('GET /tickets', (_, res) => json(res, {data: {tickets: [ticket], total: 1, limit: 50, offset: 0}}));
+    overrides.set(`GET /tickets/${ids.ticket}`, (_, res) => json(res, {data: ticket}));
+    overrides.set('POST /tickets', (_, res) => json(res, {data: ticket}, 201));
+    for (const result of [await call('list_tickets'), await call('get_ticket', {ticket_id: ids.ticket}), await call('create_ticket', {subject: 'Fixture', message: 'Fixture body', confirm: true})]) {
+        const text = JSON.stringify(data(result));
+        assert.doesNotMatch(text, /internalNotes|escalat|secret-note/);
+        assert.match(text, /Fixture/);
+    }
+});
+
+test('test_modem reports a 200 error body as ok:false, success as ok:true', async () => {
+    overrides.set(`POST /modems/${ids.modem}/test`, (_, res) => json(res, {error: 'Modem unavailable!', requestTime: 3}));
+    assert.equal(data(await call('test_modem', {proxy: ids.modem})).ok, false);
+    overrides.set(`POST /modems/${ids.modem}/test`, (_, res) => json(res, {data: {error: '', extIp: '203.0.113.9'}}, 201));
+    assert.equal(data(await call('test_modem', {proxy: ids.modem})).ok, true);
+});
+
+test('webhook tools: set warns about automatic replacement; delete and secret rotation use the real routes', async () => {
+    const client = await connect();
+    const tools = (await client.listTools()).tools;
+    assert.match(tools.find(tool => tool.name === 'coronium_set_webhook').description, /automatic replacement of dead proxies/);
+    assert.match(tools.find(tool => tool.name === 'coronium_rotate_webhook_secret').description, /returned once/);
+    error(await call('delete_webhook', {}, client));
+    assert.equal(requests.length, 0);
+    data(await call('delete_webhook', {confirm: true}, client));
+    data(await call('rotate_webhook_secret', {confirm: true}, client));
+    assert.equal(last('/account/webhook').method, 'DELETE');
+    assert.equal(last('/account/webhook/secret/rotate').method, 'POST');
+});
+
+test('login accepts a non-email account name', async () => {
+    data(await call('login', {login: 'reseller_account', password: 'fixture-password'}));
+    assert.deepEqual(last('/get-token').body, {login: 'reseller_account', password: 'fixture-password'});
+});
+
+for (const [name, args, method, path] of [
+    ['set_white_list', {proxy: ids.modem, white_list: ['198.51.100.7'], confirm: true}, 'PUT', `/modems/${ids.modem}/set-white-list`],
+    ['get_usage', {proxy: ids.modem, days: 7}, 'GET', `/modems/${ids.modem}/usage`],
+    ['start_speed_test', {proxy: ids.modem, confirm: true}, 'POST', `/modems/${ids.modem}/speed-test`],
+    ['get_speed_test', {proxy: ids.modem}, 'GET', `/modems/${ids.modem}/speed-test`],
+    ['revoke_openvpn', {proxy: ids.modem, confirm: true}, 'POST', `/modems/${ids.modem}/openvpn/revoke`],
+]) test(`Node route forwarding: ${name}`, async () => { data(await call(name, args)); assert.equal(last(path).method, method); });
+
+test('public files carry no internal details, long dashes or non-public contact addresses', () => {
+    const files = ['README.md', 'CHANGELOG.md', 'llms.txt', 'AGENTS.md', 'docs/backend-contract.md', '.env.example', 'package.json', 'test/fixtures/v3-routes.json', ...['api-client', 'config', 'errors', 'formatters', 'mcp-server', 'profiles', 'proxies', 'rotation', 'tool', 'token-store'].map(name => `src/${name}.ts`), ...['account', 'auth', 'node', 'pool', 'proxies', 'shop', 'tickets'].map(name => `src/tools/${name}.ts`)];
+    for (const file of files) {
+        const text = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+        assert.doesNotMatch(text, /farmer|koef|ts-api|home\/projects|mongodb|\.(?:js|ts):\d+|security@|support@/i, file);
+        if (file !== 'CHANGELOG.md') assert.doesNotMatch(text, /[\u2013\u2014]/, file);
+    }
+});
+
+// Runs last: every request any tool made in this file maps to a fixture route.
+test('every request sent during the suite matches a route in the public fixture', () => {
+    const synthetic = new Set(['/payment/failure', '/payment/timeout', '/payment/html', '/modems/anything/restart']);
+    const patterns = [...routeFixture.routes, ...routeFixture.non_v3_routes].map(route => ({method: route.method,
+        pattern: new RegExp(`^${route.path.replace(/:[A-Za-z_]+/g, '[^/]+')}$`)}));
+    const unmatched = allRequests.filter(request => !synthetic.has(request.path)
+        && !patterns.some(route => route.method === request.method && route.pattern.test(request.path)));
+    assert.deepEqual(unmatched.map(request => `${request.method} ${request.path}`), []);
 });
