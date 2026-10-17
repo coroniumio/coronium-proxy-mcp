@@ -33,6 +33,11 @@ Directory-ready release: explicit tool profiles, spending off by default, and fi
 - Renewal quotes are refused when the backend changed the days of a line. A coupon that gives no discount is refused before checkout instead of being charged at full price.
 - Concurrent cancel or replace calls for the same proxy send one request.
 - Money tools are annotated `destructiveHint:true`; every tool has an annotation `title`.
+- `CORONIUM_ENABLE_SPENDING` and `CORONIUM_BASE_URL` are no longer read from a `.env` file in the working directory; set them in the host environment or via `DOTENV_CONFIG_PATH`.
+- Cancellation results and previews return only the documented customer fields.
+- Buy and renew results include `charge` (`approved_usd`, `charged_usd`, `within_approval`) from the backend's charged amount.
+- `change_proxy_password` describes the real length rule (6-128, Node rentals 8 or more).
+- Dev dependencies and CI actions are pinned to exact versions.
 
 ### Dependencies
 
@@ -45,7 +50,7 @@ Reconciles the public customer MCP with deployed backend contracts. The Coronium
 ### Breaking migration changes
 
 - All 48 previous tool names remain; 11 tools are added. Results use structured `data`/`observed_at` envelopes, with JSON text for compatible clients. Do not parse old human-formatted lines.
-- Buy/renew operations require `confirm:true`, an 8-128-character `idempotency_key`, and use `funding_source: account_credit | btc` (default account credit). They send the real backend fields and preserve complete receipts. There are no automatic write retries.
+- Buy/renew operations require `confirm:true`, an 8-128-character `idempotency_key`, and use `funding_source` `account_credit` or `btc` (default account credit). They send the real backend fields and preserve complete receipts. There are no automatic write retries.
 - Renewals use `modems:[{modem_id,days}]`, not a purchase tariff or plain ID list. The new renewal quote must include every requested modem.
 - Disruptive modem changes, cancellation, outbound support messages and webhook changes/tests require confirmation. `cancel_modem` means immediate release; the old end-of-term description was wrong. A new cancellation preview performs `dryRun:true`.
 - `rotate_modem` waits for the synchronous v3 route. Removed `wait_for_completion`, `max_wait_time` and `CORONIUM_ROTATION_URL`; no external reset service or substring polling. The replacement tool no longer accepts the ignored `same_country` parameter; the backend decides eligibility.

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import {after, afterEach, beforeEach, test} from 'node:test';
 import {createServer as createHttpServer} from 'node:http';
-import {mkdtempSync, readFileSync, rmSync, statSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join, resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {InMemoryTransport} from '@modelcontextprotocol/sdk/inMemory.js';
@@ -44,7 +44,8 @@ const backend = createHttpServer(async (req, res) => {
     if (path === '/account/proxies') return json(res, {data: [proxy]});
     if (path === '/account/crypto-balance') return json(res, [{coin: 'btc', balance: 0.003, address: 'fixture-address'}, {coin: 'usdt', balance: 17}, {coin: 'account_credit', balance: 320}]);
     if (path === '/coupons/check') return json(res, {data: {discount: body.coupon_name === 'SAVE' ? '10%' : 0}});
-    if (/^\/modems\/[a-f0-9]{24}\/cancel$/.test(path)) return json(res, body?.dryRun === true ? {dryRun: true, cancelled: false, refundAmount: 12.5} : {cancelled: true, refundAmount: 12.5, refundedTo: 'account_credit'});
+    // unreviewedField stands for any field the backend adds that is not in the public fixture.
+    if (/^\/modems\/[a-f0-9]{24}\/cancel$/.test(path)) return json(res, body?.dryRun === true ? {dryRun: true, cancelled: false, refundAmount: 12.5, hoursUsed: 3, unreviewedField: 4.2} : {cancelled: true, refundAmount: 12.5, refundedTo: 'account_credit', unreviewedField: 4.2});
     if (path === '/payment/renewal-quote') return json(res, {currency: 'USD', total_usd: 129, total_cents: 12900, line_items: body.modems.map(modem => ({modem_id: modem.modem_id, days: modem.days, usd: 129}))});
     if (path === '/account/pool-keys') return json(res, {data: [{_id: ids.key, traffic_cap_gb: 10, traffic_used_gb: 2.25, traffic_synced_at: 1234, sync_stale_minutes: 2, status: 'active'}]});
     if (path === '/tickets' && req.method === 'GET') return json(res, {data: {tickets: [{_id: ids.ticket, subject: 'Fixture', status: 'pending'}], total: 7, limit: Number(record.query.limit), offset: Number(record.query.offset)}});
@@ -54,6 +55,13 @@ const backend = createHttpServer(async (req, res) => {
     if (path.startsWith('/modems/rotate-modem-by-token/')) return json(res, {result: 'ok', ext_ip: '203.0.113.9', new_ip: '203.0.113.9'});
     if (path.endsWith('/openvpn')) {res.writeHead(200, {'Content-Type': 'application/octet-stream'}); return res.end('<client>\nclient\nremote fixture.invalid 1194\n</client>');}
     if (path === '/account/webhook/test') return json(res, {delivered: true, status_code: 204});
+    // Modem buy and renew lanes answer with the live 200 shape: charged_usd and the delivered proxies.
+    if (/^\/payment\/(?:buy|renew)-(?:with-account-credit|modems-with-crypto-balance)$/.test(path)) {
+        const count = body.modemCount ?? body.modems.length;
+        const charged = Math.round(129 * count * (body.coupon ? 0.9 : 1) * 100) / 100;
+        const delivered = Array.from({length: count}, (_, index) => ({_id: String(index).padStart(24, 'b'), proxy_login: 'fixture'}));
+        return json(res, {result: 'ok', charged_usd: charged, currency: 'USD', data: delivered}, 200, {'x-request-id': 'fixture-request', 'x-idempotency-replay': 'false'});
+    }
     if (path.startsWith('/payment/') || path.endsWith('/topup') || path.endsWith('/cancel')) return json(res, {result: 'ok', payment_id: 'fixture-payment', billing: {currency: 'USD', total: 129}, ...body}, 200, {'x-request-id': 'fixture-request', 'x-idempotency-replay': 'false'});
     return json(res, {result: 'ok', data: {path, ...body}});
 });
@@ -172,12 +180,28 @@ test('purchase uses account credit and the real body, preserving full billing re
     const request = last('/payment/buy-with-account-credit');
     assert.deepEqual(request.body, {tariff_id: ids.tariff, modemCount: 2, coupon: {coupon_name: 'SAVE'}, metadata: '{"job":"fixture"}', wantP0f: false});
     assert.equal(request.headers['idempotency-key'], key);
-    assert.equal(result.response.billing.total, 129);
+    assert.equal(result.response.charged_usd, 232.2);
+    assert.deepEqual(result.charge, {approved_usd: 232.2, charged_usd: 232.2, within_approval: true});
     assert.equal(result.request.idempotency_key, key);
     assert.equal(result.request.request_id, 'fixture-request');
     assert.equal(result.request.replayed, false);
-    assert.equal(result.delivery.delivery_verified, false);
+    assert.equal(result.delivery.delivered_count, 2);
+    assert.equal(result.delivery.delivery_verified, true);
     assert.match(result.delivery.next_step, /get_payments/);
+});
+
+test('a charge above the approved total, a short delivery and a queued payment are reported, never hidden', async () => {
+    const base = {tariff_id: ids.tariff, quantity: 2, funding_source: 'account_credit', expected_total_usd: 258, confirm: true};
+    overrides.set('POST /payment/buy-with-account-credit', (_, res) => json(res, {result: 'ok', charged_usd: 300, currency: 'USD', data: [{_id: ids.second}]}));
+    const over = data(await call('buy_modems_with_balance', {...base, idempotency_key: randomUUID()}));
+    assert.deepEqual(over.charge, {approved_usd: 258, charged_usd: 300, within_approval: false});
+    assert.equal(over.delivery.delivered_count, 1);
+    assert.equal(over.delivery.delivery_verified, false);
+    overrides.set('POST /payment/buy-modems-with-crypto-balance', (_, res) => json(res, {message: 'Payment is processing', paymentId: 'fixture-queued'}, 202));
+    const queued = data(await call('buy_modems_with_balance', {...base, funding_source: 'btc', idempotency_key: randomUUID()}));
+    assert.deepEqual(queued.charge, {approved_usd: 258, charged_usd: null, within_approval: null});
+    assert.equal(queued.delivery.delivery_verified, false);
+    assert.equal(queued.response.paymentId, 'fixture-queued');
 });
 
 test('BTC purchase selects BTC route, not USD credit', async () => {
@@ -350,10 +374,14 @@ test('metadata objects are serialized, per-server OS options are checked', async
 });
 
 test('cancellation preview sends dryRun:true; cancellation is an explicit separate call', async () => {
-    data(await call('preview_modem_cancellation', {proxy: ids.modem}));
+    const preview = data(await call('preview_modem_cancellation', {proxy: ids.modem}));
     assert.deepEqual(last(`/modems/${ids.modem}/cancel`).body, {dryRun: true});
+    // Only documented customer fields leave the tool.
+    assert.deepEqual(preview.response, {dryRun: true, cancelled: false, refundAmount: 12.5, hoursUsed: 3});
     const cancelled = data(await call('cancel_modem', {proxy: ids.modem, reason: 'approved fixture', min_refund_usd: 12.5, confirm: true}));
     assert.equal(cancelled.preview_before_submission.refundAmount, 12.5);
+    assert.deepEqual(cancelled.response, {cancelled: true, refundAmount: 12.5, refundedTo: 'account_credit'});
+    assert.doesNotMatch(JSON.stringify(cancelled), /unreviewedField/);
     assert.deepEqual(last(`/modems/${ids.modem}/cancel`).body, {reason: 'approved fixture'});
 });
 
@@ -512,6 +540,26 @@ test('real stdio transport starts cleanly, accepts API_KEY alias and exposes val
         assert.equal(last('/account').headers.authorization, 'Bearer alias-fixture-token');
         assert.equal(stderr, '');
     } finally {await client.close();}
+});
+
+test('a .env in the working directory cannot enable spending or redirect the token', async () => {
+    const project = mkdtempSync(join(tmpdir(), 'coronium-mcp-cwd-'));
+    writeFileSync(join(project, '.env'), 'CORONIUM_ENABLE_SPENDING=1\nCORONIUM_BASE_URL=https://redirect.example.invalid/api/v3\nCORONIUM_API_TOKEN=dotenv-fixture-token\n');
+    // No CORONIUM_BASE_URL in the host environment: get_capabilities makes no
+    // network request, so nothing reaches production or the redirect host.
+    const transport = new StdioClientTransport({command: process.execPath, args: [resolve('dist/server.js')], cwd: project, stderr: 'pipe', env: {PATH: process.env.PATH, HOME: home}});
+    const client = new Client({name: 'dotenv-contract', version: '1.0.0'});
+    try {
+        await client.connect(transport);
+        const names = (await client.listTools()).tools.map(tool => tool.name);
+        for (const name of MONEY_TOOLS) assert(!names.includes(name), name);
+        const capabilities = data(await call('get_capabilities', {}, client));
+        assert.equal(capabilities.spending_enabled, false);
+        assert.equal(capabilities.api_base_url, 'https://api.coronium.io/api/v3');
+    } finally {
+        await client.close();
+        rmSync(project, {recursive: true, force: true});
+    }
 });
 
 // Exercise the remaining forwarding routes through the MCP transport, not a

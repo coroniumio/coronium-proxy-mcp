@@ -84,6 +84,22 @@ export function toCustomerTicket(ticket: unknown): unknown {
     return view;
 }
 
+// Customer-facing cancellation fields, from the public route fixture. Anything
+// else in a cancel or preview body stays out of tool results until it has been
+// reviewed and added here.
+const CANCELLATION_FIELDS: readonly string[] = ["dryRun", "cancelled", "modemId", "modemName", "refundAmount", "refundedTo",
+    "hoursUsed", "totalHours", "pricePerHour", "originalPrice", "priceBasis", "originalDays", "subscriptionStart", "subscriptionEnd", "message"];
+
+export function toCustomerCancellation(response: unknown): unknown {
+    if (!response || typeof response !== "object" || Array.isArray(response)) return response;
+    const source: ApiObject = response as ApiObject;
+    const view: ApiObject = {};
+    for (const field of CANCELLATION_FIELDS) {
+        if (field in source) view[field] = source[field];
+    }
+    return view;
+}
+
 export function toCustomerTicketList(response: ApiObject): ApiObject {
     const tickets = response?.data?.tickets;
     if (!Array.isArray(tickets)) return response;

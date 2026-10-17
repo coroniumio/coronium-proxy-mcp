@@ -2,7 +2,24 @@ import dotenv from "dotenv";
 import {readFileSync} from "node:fs";
 import {profileFromEnvironment, type ToolProfile} from "./profiles.js";
 
-dotenv.config({quiet: true, path: process.env.DOTENV_CONFIG_PATH});
+// Settings that turn on spending or redirect the bearer token must come from the
+// MCP host's own environment or a deliberately chosen DOTENV_CONFIG_PATH. A .env
+// file that merely sits in the working directory (often a project the host was
+// opened in) must not enable them.
+const HOST_ONLY_SETTINGS: readonly string[] = ["CORONIUM_ENABLE_SPENDING", "CORONIUM_BASE_URL"];
+
+function loadDotenv(): void {
+    const explicitPath: string | undefined = process.env.DOTENV_CONFIG_PATH;
+    if (explicitPath) {
+        dotenv.config({quiet: true, path: explicitPath});
+        return;
+    }
+    const unsetBefore: string[] = HOST_ONLY_SETTINGS.filter(name => process.env[name] === undefined);
+    dotenv.config({quiet: true});
+    for (const name of unsetBefore) delete process.env[name];
+}
+
+loadDotenv();
 
 export const SERVER_NAME = "coronium-proxy-mcp";
 export const SERVER_VERSION: string = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;

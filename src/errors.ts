@@ -101,9 +101,9 @@ function isRotationFailure(context: ErrorContext): boolean {
     return context.body.result === "error" || /rotat/i.test(String(context.body.error ?? ""));
 }
 
-// Classify by HTTP status and body fields first and by code last: the live error
-// envelope rewrites codes it does not know (for example rotation_cooldown) to
-// internal_error or to a misleading "rotation in progress".
+// Classify by HTTP status and body fields first and by code last: on some
+// routes the code is generic (internal_error) or does not describe the refusal,
+// so it is kept as backend_code but never decides the agent's next step alone.
 export function classifyError(context: ErrorContext): Classification {
     const backendCode: string | undefined = normalizeErrorCode(context.body.code);
     if (context.status === 429 && context.rotation) {

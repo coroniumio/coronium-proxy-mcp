@@ -1277,7 +1277,7 @@
     {
       "name": "coronium_change_proxy_password",
       "title": "change proxy password",
-      "description": "Change an owned proxy's password; the previous password stops working immediately. Supply 8-128 printable characters without spaces, or omit to generate a random password in this MCP process. The password is sent to the backend and returned to you.",
+      "description": "Change an owned proxy's password; the previous password stops working immediately. Supply 6-128 characters (Coronium Node rentals need at least 8), or omit to generate a random 32-character password in this MCP process. The password is sent to the backend and returned to you.",
       "inputSchema": {
         "type": "object",
         "properties": {

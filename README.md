@@ -43,6 +43,8 @@ Set the host's tool timeout above **180 seconds**: rotation, replacement and pay
 - `CORONIUM_TOOL_PROFILE`: `directory`, `full` or `read-only`. Any other value stops the server at startup.
 - `CORONIUM_ENABLE_SPENDING`: `1` or `true` enables money tools in the `full` profile. Default off.
 - `CORONIUM_BASE_URL`: defaults to `https://api.coronium.io/api/v3` when unset or empty. An override must be HTTPS (loopback HTTP is allowed for tests) and must not contain credentials, a query or a fragment. Leave it unset in normal use so the token only goes to Coronium.
+
+`CORONIUM_ENABLE_SPENDING` and `CORONIUM_BASE_URL` are read only from the host's environment or from the file named by `DOTENV_CONFIG_PATH`. A `.env` file that happens to be in the working directory cannot turn spending on or redirect the token.
 - `CORONIUM_LOGIN` (or `CORONIUM_EMAIL`) and `CORONIUM_PASSWORD`: optional login instead of a token, `full` profile only.
 - `CORONIUM_AUTO_LOGIN`: `0` disables automatic login and refresh.
 - `TOKEN_ENCRYPTION_KEY`: optional secret that lets a login token persist AES-256-GCM encrypted at `~/.coronium/token.enc` (directory 0700, file 0600). Without it nothing is written to disk.

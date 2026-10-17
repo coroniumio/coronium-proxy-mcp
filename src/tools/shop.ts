@@ -11,7 +11,7 @@ interface RenewalLine {
 }
 
 const PRICE_TOLERANCE_USD = 0.005;
-const RECONCILE_STEP = "This receipt has no payment ID. Confirm delivery with coronium_get_proxies and the charge with coronium_get_payments. Never buy again to fix an unclear result; open a ticket quoting the idempotency key and request ID instead.";
+const RECONCILE_STEP = "If this receipt has no payment ID, confirm delivery with coronium_get_proxies and the charge with coronium_get_payments. Never buy again to fix an unclear result; open a ticket quoting the idempotency key and request ID instead.";
 
 const couponField = z.string().min(1).max(128).optional();
 const fundingSource = z.enum(["account_credit", "btc"]).describe("Required. account_credit spends USD account credit; btc spends the native BTC balance at the live rate. USDT and cards are not supported by these tools.");
@@ -42,7 +42,8 @@ export function applyCoupon(listUsd: number, value: unknown): number {
 async function couponValue(coupon: string): Promise<unknown> {
     const response = await api.post("/coupons/check", {coupon_name: coupon}, {readOnly: true});
     const discount = response?.data?.discount;
-    // The checkout lanes silently ignore an unusable coupon and charge full price.
+    // Refuse before checkout when the coupon gives no discount, so the user is
+    // never charged a total that differs from the one they approved.
     if (discount === undefined || discount === null || discount === "" || discount === 0 || discount === "0") {
         throw new CoroniumError({code: "coupon_invalid", message: "The coupon gives no discount now. Nothing was charged. Ask the user whether to continue without it.", suggested_action: "confirm_without_coupon"});
     }
@@ -76,6 +77,17 @@ function deliveryReport(receipt: ApiObject, requested: number): Record<string, u
     const delivered = receipt?.response?.data;
     const deliveredCount = Array.isArray(delivered) ? delivered.length : null;
     return {requested_count: requested, delivered_count: deliveredCount, delivery_verified: deliveredCount === requested, next_step: RECONCILE_STEP};
+}
+
+// The pre-check above is client-side, so the result also compares what the
+// backend says it charged with what the user approved. A queued payment
+// (HTTP 202) has no charged amount yet; that stays null, never "within".
+function chargeReport(receipt: ApiObject, approvedUsd: number): Record<string, unknown> {
+    const charged: unknown = receipt?.response?.charged_usd;
+    if (typeof charged !== "number" || !Number.isFinite(charged)) {
+        return {approved_usd: approvedUsd, charged_usd: null, within_approval: null};
+    }
+    return {approved_usd: approvedUsd, charged_usd: charged, within_approval: charged <= approvedUsd + PRICE_TOLERANCE_USD};
 }
 
 async function currentTariff(tariffId: string, quantity: number, countryCode?: string): Promise<ApiObject> {
@@ -165,7 +177,7 @@ function registerSpendingTools(server: McpServer): void {
                 ...(want_p0f !== undefined ? {wantP0f: want_p0f} : {})};
             const path = funding_source === "btc" ? "/payment/buy-modems-with-crypto-balance" : "/payment/buy-with-account-credit";
             const receipt = await api.payment(path, body, idempotency_key);
-            return {funding_source, ...receipt, delivery: deliveryReport(receipt, quantity)};
+            return {funding_source, ...receipt, charge: chargeReport(receipt, expected_total_usd), delivery: deliveryReport(receipt, quantity)};
         },
     });
     registerTool(server, "coronium_renew_modems_with_balance", {
@@ -178,7 +190,7 @@ function registerSpendingTools(server: McpServer): void {
             assertWithinApproval(quote.total_usd, expected_total_usd);
             const path = funding_source === "btc" ? "/payment/renew-modems-with-crypto-balance" : "/payment/renew-with-account-credit";
             const receipt = await api.payment(path, {modems, ...couponBody(coupon)}, idempotency_key);
-            return {funding_source, quote_before_submission: quote, ...receipt, next_step: RECONCILE_STEP};
+            return {funding_source, quote_before_submission: quote, ...receipt, charge: chargeReport(receipt, expected_total_usd), next_step: RECONCILE_STEP};
         },
     });
 }

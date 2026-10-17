@@ -4,13 +4,13 @@ import {z} from "zod";
 import {api, type ApiObject, assertSpendingAllowed} from "../api-client.js";
 import {config} from "../config.js";
 import {CoroniumError, invalidResponse} from "../errors.js";
-import {unwrap} from "../formatters.js";
+import {toCustomerCancellation, unwrap} from "../formatters.js";
 import {findProxy, normalizedProxies, proxyField, resolveProxyId} from "../proxies.js";
 import {type RotationResult, toRotationResult} from "../rotation.js";
 import {confirmation, countrySchema, registerTool, usdAmount} from "../tool.js";
 
-// One cancel or replace per modem at a time within this process. The backend
-// does not serialize these, so a duplicate concurrent call is refused here.
+// One cancel or replace per modem at a time within this process, so a repeated
+// tool call never sends a second request while the first is still running.
 const modemActions = new Map<string, Promise<unknown>>();
 
 async function withModemLock<T>(id: string, action: () => Promise<T>): Promise<T> {
@@ -77,7 +77,7 @@ async function cancelModem(identifier: string, minimumRefundUsd: number, reason?
     return withModemLock(id, async () => {
         // Re-run the preview right before the real call. The refund shrinks with
         // time, so the check is one-sided: refuse only below the approved floor.
-        const preview = await api.post(`/modems/${id}/cancel`, {dryRun: true}, {readOnly: true});
+        const preview = toCustomerCancellation(await api.post(`/modems/${id}/cancel`, {dryRun: true}, {readOnly: true})) as ApiObject;
         const refund = refundOf(preview);
         if (refund + 0.005 < minimumRefundUsd) {
             throw new CoroniumError({code: "refund_changed",
@@ -85,7 +85,7 @@ async function cancelModem(identifier: string, minimumRefundUsd: number, reason?
                 details: preview, suggested_action: "preview_and_confirm_again"});
         }
         const response = await api.post(`/modems/${id}/cancel`, {reason}, {timeoutMs: config.actionTimeoutMs});
-        return {preview_before_submission: preview, response};
+        return {preview_before_submission: preview, response: toCustomerCancellation(response)};
     });
 }
 
@@ -123,7 +123,10 @@ function registerCancellationTools(server: McpServer): void {
     registerTool(server, "coronium_preview_modem_cancellation", {
         description: "Preview the refund for cancelling an owned proxy (dryRun). Does not cancel, release or change the proxy. Auto-renew is not managed here; it is managed in the dashboard.",
         input: {proxy: proxyField}, routes: ["GET /account/proxies", "POST /modems/:modem_id/cancel"],
-        run: async ({proxy}) => ({response: await api.post(`/modems/${await resolveProxyId(proxy)}/cancel`, {dryRun: true}, {readOnly: true})}),
+        run: async ({proxy}) => {
+            const preview = await api.post(`/modems/${await resolveProxyId(proxy)}/cancel`, {dryRun: true}, {readOnly: true});
+            return {response: toCustomerCancellation(preview)};
+        },
     });
     registerTool(server, "coronium_cancel_modem", {
         description: "IMMEDIATELY cancel and release an owned proxy and credit any pro-rata refund to account credit. The proxy stops working now and cannot be restored. This is NOT a way to stop auto-renew; never use it for that (auto-renew is managed in the dashboard). Preview first, then pass the approved minimum refund: the tool re-runs the preview and refuses if the refund is now lower. Some rental types cannot be cancelled here (CANCEL_UNSUPPORTED).",
@@ -137,7 +140,7 @@ function registerCancellationTools(server: McpServer): void {
 
 function registerSettingsTools(server: McpServer): void {
     registerTool(server, "coronium_change_proxy_password", {
-        description: "Change an owned proxy's password; the previous password stops working immediately. Supply 8-128 printable characters without spaces, or omit to generate a random password in this MCP process. The password is sent to the backend and returned to you.",
+        description: "Change an owned proxy's password; the previous password stops working immediately. Supply 6-128 characters (Coronium Node rentals need at least 8), or omit to generate a random 32-character password in this MCP process. The password is sent to the backend and returned to you.",
         input: {proxy: proxyField, proxy_password: z.string().min(6).max(128).optional(), confirm: confirmation}, access: "write", destructive: true,
         routes: ["GET /account/proxies", "PUT /modems/:modem_id/change-password"],
         run: async ({proxy, proxy_password}) => {
