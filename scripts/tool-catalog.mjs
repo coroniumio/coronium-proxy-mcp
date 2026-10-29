@@ -2,26 +2,28 @@ import {readFileSync, writeFileSync} from 'node:fs';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {InMemoryTransport} from '@modelcontextprotocol/sdk/inMemory.js';
 // Documentation generation has no credentials and makes no backend calls.
-// It documents every tool: the full profile with spending enabled.
+// It documents every tool: the full profile with spending and the opt-in login tool enabled.
 for (const key of Object.keys(process.env)) if (/^CORONIUM_|^TOKEN_ENCRYPTION_KEY$/.test(key)) delete process.env[key];
 process.env.DOTENV_CONFIG_PATH = '/dev/null';
 process.env.CORONIUM_TOOL_PROFILE = 'full';
 process.env.CORONIUM_ENABLE_SPENDING = '1';
+process.env.CORONIUM_ENABLE_LOGIN_TOOL = '1';
 const {createServer} = await import('../dist/mcp-server.js');
 const {toolDefinitions} = await import('../dist/tool.js');
-const {DIRECTORY_TOOLS} = await import('../dist/profiles.js');
+const {DIRECTORY_TOOLS, BUYER_TOOLS} = await import('../dist/profiles.js');
 
 function accessLabel(name) {
     const definition = toolDefinitions.get(name);
     if (definition.money === 'spends') return 'spends money, needs CORONIUM_ENABLE_SPENDING=1';
     if (definition.money === 'refunds') return 'cancels with refund, needs CORONIUM_ENABLE_SPENDING=1';
+    if (definition.access === 'auth') return 'opt-in, needs CORONIUM_ENABLE_LOGIN_TOOL=1';
     return definition.access;
 }
 
 function catalogLine(tool) {
     const required = (tool.inputSchema.required || []).map(name => `\`${name}\``).join(', ') || 'none';
-    const directory = DIRECTORY_TOOLS.has(tool.name) ? ', directory' : '';
-    return `- \`${tool.name}\` (${accessLabel(tool.name)}${directory}). Required: ${required}.`;
+    const profiles = [BUYER_TOOLS.has(tool.name) ? 'buyer' : '', DIRECTORY_TOOLS.has(tool.name) ? 'directory' : ''].filter(Boolean).map(name => `, ${name}`).join('');
+    return `- \`${tool.name}\` (${accessLabel(tool.name)}${profiles}). Required: ${required}.`;
 }
 
 const server = createServer();

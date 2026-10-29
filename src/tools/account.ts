@@ -64,7 +64,7 @@ export function registerAccountTools(server: McpServer): void {
         run: async () => balances(await api.get("/account")),
     });
     registerTool(server, "coronium_get_crypto_balance", {
-        description: "Get crypto deposit addresses and native balances. This backend GET can create missing wallets, so it is treated as a write. Use get_balance for a pure balance read.",
+        description: "Get crypto deposit addresses and native balances. Only the BTC balance can pay for proxies through this MCP (funding_source btc), once the deposit confirms. This backend GET can create missing wallets, so it is treated as a write. Use get_balance for a pure balance read.",
         input: {}, access: "write", routes: ["GET /account/crypto-balance"],
         run: async () => ({wallets: arrayResponse(await api.get("/account/crypto-balance", undefined, {mutates: true}), "Wallets")}),
     });

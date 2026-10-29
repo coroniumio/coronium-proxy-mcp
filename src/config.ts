@@ -6,7 +6,7 @@ import {profileFromEnvironment, type ToolProfile} from "./profiles.js";
 // MCP host's own environment or a deliberately chosen DOTENV_CONFIG_PATH. A .env
 // file that merely sits in the working directory (often a project the host was
 // opened in) must not enable them.
-const HOST_ONLY_SETTINGS: readonly string[] = ["CORONIUM_ENABLE_SPENDING", "CORONIUM_BASE_URL"];
+const HOST_ONLY_SETTINGS: readonly string[] = ["CORONIUM_ENABLE_SPENDING", "CORONIUM_ENABLE_LOGIN_TOOL", "CORONIUM_BASE_URL"];
 
 function loadDotenv(): void {
     const explicitPath: string | undefined = process.env.DOTENV_CONFIG_PATH;
@@ -64,6 +64,7 @@ export interface Config {
     readOnly: boolean;
     profile: ToolProfile;
     spendingEnabled: boolean;
+    loginToolEnabled: boolean;
     timeoutMs: number;
     actionTimeoutMs: number;
 }
@@ -82,8 +83,10 @@ export const config: Config = {
     autoLoginOn401: process.env.CORONIUM_AUTO_LOGIN !== "0",
     readOnly: profile === "read-only",
     profile,
-    // Spending is opt-in and only honoured by the full profile.
+    // Spending is opt-in and only honoured by the full and buyer profiles.
     spendingEnabled: flag("CORONIUM_ENABLE_SPENDING"),
+    // The password login tool is opt-in. Use CORONIUM_API_TOKEN instead.
+    loginToolEnabled: flag("CORONIUM_ENABLE_LOGIN_TOOL"),
     timeoutMs: 30_000,
     actionTimeoutMs: 180_000,
 };

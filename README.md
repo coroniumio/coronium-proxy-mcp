@@ -1,6 +1,6 @@
 # Coronium proxy MCP
 
-A local **stdio MCP server** for customers of Coronium.io dedicated 4G/5G mobile proxies. Version 2.1.0. It lets an AI agent check balances, list owned proxies with ready-to-use HTTP and SOCKS5 URLs, test and rotate proxies, replace a proxy, download an OpenVPN profile, compare plans and live stock by country and carrier, get renewal quotes, and work with support tickets.
+A local **stdio MCP server** for customers of Coronium.io dedicated 4G/5G mobile proxies. Version 2.2.0. It lets an AI agent check balances, list owned proxies with ready-to-use HTTP and SOCKS5 URLs, test and rotate proxies, replace a proxy, download an OpenVPN profile, compare plans and live stock by country and carrier, quote a purchase or a renewal, and work with support tickets. If you turn spending on, it can also buy from your account balance, after you approve the exact total.
 
 It talks only to the Coronium customer API at `https://api.coronium.io/api/v3` (plus the public plan catalog on the same host). It has no admin, server or reseller-management tools. Upgrading from 1.3.0 or 2.0.0? Read the [migration notes](CHANGELOG.md).
 
@@ -13,7 +13,7 @@ Requires **Node.js 20 or newer**. Configure your MCP host to launch the pinned v
   "mcpServers": {
     "coronium": {
       "command": "npx",
-      "args": ["-y", "coronium-proxy-mcp@2.1.0"],
+      "args": ["-y", "coronium-proxy-mcp@2.2.0"],
       "env": {
         "CORONIUM_API_TOKEN": "YOUR_CORONIUM_API_TOKEN",
         "CORONIUM_TOOL_PROFILE": "directory"
@@ -25,6 +25,28 @@ Requires **Node.js 20 or newer**. Configure your MCP host to launch the pinned v
 
 Create the API token in the dashboard (dashboard.coronium.io, Account, API Access). Keep it in your host's protected configuration or secret store, never in a repository or a conversation. `CORONIUM_API_KEY` is an alias for `CORONIUM_API_TOKEN`. Restart the host after changing configuration.
 
+The token is the way in. There is no password tool by default: `coronium_login` only exists if you set `CORONIUM_ENABLE_LOGIN_TOOL=1`, because a password passed to a tool ends up in the conversation.
+
+If you want an agent to buy for you, use the `buyer` profile and turn spending on:
+
+```json
+{
+  "mcpServers": {
+    "coronium": {
+      "command": "npx",
+      "args": ["-y", "coronium-proxy-mcp@2.2.0"],
+      "env": {
+        "CORONIUM_API_TOKEN": "YOUR_CORONIUM_API_TOKEN",
+        "CORONIUM_TOOL_PROFILE": "buyer",
+        "CORONIUM_ENABLE_SPENDING": "1"
+      }
+    }
+  }
+}
+```
+
+Leave `CORONIUM_ENABLE_SPENDING` out and the same profile can look, quote and manage, but not pay.
+
 Set the host's tool timeout above **180 seconds**: rotation, replacement and payment calls wait for the backend. If a call times out, check its outcome before acting again. The process uses stdout only for MCP JSON-RPC.
 
 ## Tool profiles
@@ -32,20 +54,24 @@ Set the host's tool timeout above **180 seconds**: rotation, replacement and pay
 `CORONIUM_TOOL_PROFILE` decides which tools exist:
 
 - `directory` registers an explicit allowlist of 21 tools: balances (account credit, BTC and USDT), owned proxies with HTTP and SOCKS5 URLs, health, connectivity test, rotation and its status, replacement, OpenVPN profile, countries, plans and stock by country and carrier, renewal quotes, tickets (list, read, create, reply), webhook read, and capabilities. It has no login tool, no OS fingerprint tools, no wallet creation, and no buy, renew, top-up or cancel tools. `check_token` takes no token argument. This is the profile the Coronium Claude Code plugin uses.
-- `full` (the default when unset) registers every non-money tool, including login, settings, webhooks, pool keys and the Coronium Node tools.
+- `buyer` registers 13 tools for an agent that buys and runs a few dedicated proxies: plans, stock, `quote_purchase`, `buy_modems_with_balance` (only with spending on), payment status, owned proxies, test, rotate and rotation status, replace, balance, crypto balance and capabilities. No login tool and no token argument anywhere.
+- `full` (the default when unset) registers every non-money tool, including settings, webhooks, pool keys and the Coronium Node tools. The login tool is not included unless `CORONIUM_ENABLE_LOGIN_TOOL=1`.
 - `read-only` registers only tools that change nothing. `CORONIUM_READ_ONLY=true` is an alias.
 
-**Spending is off by default.** Buy, renew, pool purchase and top-up, and cancel-with-refund tools exist only when `CORONIUM_TOOL_PROFILE=full` **and** `CORONIUM_ENABLE_SPENDING=1`. Without both, they are not registered and the HTTP client refuses money calls on its own (`spending_disabled`). Everyone else pays in the dashboard.
+**Spending is off by default.** Money tools exist only when `CORONIUM_ENABLE_SPENDING=1` is set **and** the profile is `full` (buy, renew, pool purchase and top-up, cancel with refund) or `buyer` (buy only). Without both, they are not registered and the HTTP client refuses money calls on its own (`spending_disabled`). Otherwise you pay in the dashboard.
+
+Tools are always listed in alphabetical order, so the list is the same in every session.
 
 ### Configuration
 
 - `CORONIUM_API_TOKEN` (or `CORONIUM_API_KEY`): the dashboard API token, kept in memory only.
-- `CORONIUM_TOOL_PROFILE`: `directory`, `full` or `read-only`. Any other value stops the server at startup.
-- `CORONIUM_ENABLE_SPENDING`: `1` or `true` enables money tools in the `full` profile. Default off.
+- `CORONIUM_TOOL_PROFILE`: `buyer`, `directory`, `full` or `read-only`. Any other value stops the server at startup.
+- `CORONIUM_ENABLE_SPENDING`: `1` or `true` enables money tools in the `full` and `buyer` profiles. Default off.
+- `CORONIUM_ENABLE_LOGIN_TOOL`: `1` or `true` registers `coronium_login` and `coronium_logout` in the `full` and `read-only` profiles. Default off. Never in `buyer` or `directory`.
 - `CORONIUM_BASE_URL`: defaults to `https://api.coronium.io/api/v3` when unset or empty. An override must be HTTPS (loopback HTTP is allowed for tests) and must not contain credentials, a query or a fragment. Leave it unset in normal use so the token only goes to Coronium.
 
-`CORONIUM_ENABLE_SPENDING` and `CORONIUM_BASE_URL` are read only from the host's environment or from the file named by `DOTENV_CONFIG_PATH`. A `.env` file that happens to be in the working directory cannot turn spending on or redirect the token.
-- `CORONIUM_LOGIN` (or `CORONIUM_EMAIL`) and `CORONIUM_PASSWORD`: optional login instead of a token, `full` profile only.
+`CORONIUM_ENABLE_SPENDING`, `CORONIUM_ENABLE_LOGIN_TOOL` and `CORONIUM_BASE_URL` are read only from the host's environment or from the file named by `DOTENV_CONFIG_PATH`. A `.env` file that happens to be in the working directory cannot turn spending on or redirect the token.
+- `CORONIUM_LOGIN` (or `CORONIUM_EMAIL`) and `CORONIUM_PASSWORD`: older login from the host environment instead of a token. Still works, but prefer the token.
 - `CORONIUM_AUTO_LOGIN`: `0` disables automatic login and refresh.
 - `TOKEN_ENCRYPTION_KEY`: optional secret that lets a login token persist AES-256-GCM encrypted at `~/.coronium/token.enc` (directory 0700, file 0600). Without it nothing is written to disk.
 - `DOTENV_CONFIG_PATH`: optional explicit `.env` path.
@@ -72,10 +98,25 @@ A `rotation_cooldown` error carries `retry_after_seconds`; wait that long. Anyon
 
 **Auto-renew** is managed in the dashboard. `cancel_modem` is never a way to stop auto-renew: it releases the proxy immediately.
 
-### Money tools (full profile with spending enabled)
+### Funding, as it works today
+
+- A person adds account credit in the dashboard at dashboard.coronium.io (card or crypto). This MCP cannot add funds.
+- BTC: `get_crypto_balance` returns the account's BTC deposit address. Once a deposit confirms, buy or renew with `funding_source: "btc"`.
+- Want to try the service first? Buy one paid 1-day plan.
+- Refunds go back to the account balance.
+
+### Buying, step by step (spending enabled)
+
+1. `list_tariffs` or `list_free_modems` to see plans and live stock.
+2. `quote_purchase` with the plan and quantity. It checks stock and returns `total_usd`.
+3. `get_balance`, then show the person the plan, quantity, funding source and total. Wait for a clear yes for that exact amount.
+4. `buy_modems_with_balance` with `confirm: true`, `expected_total_usd` set to the quoted total and one new UUID `idempotency_key`.
+5. On HTTP 202 or an unclear result, poll `get_payment_status` (when you have a payment ID) and `get_proxies`. Never order again.
+
+### Money tools (spending enabled)
 
 - Every money tool needs `confirm:true`, a UUID `idempotency_key` per approved intent, and the approved amount. Buy and renew also need an explicit `funding_source` (`account_credit` or `btc`; no default).
-- `expected_total_usd`: the tool re-reads the current price (plan price and coupon, renewal quote, or pool plan price) right before sending and refuses with `price_changed` when the total is now higher. This is a client-side check, not a server price lock.
+- `expected_total_usd`: the tool re-reads the live price (plan price and coupon, renewal quote, or pool plan price) right before sending and refuses with `price_changed` when the total differs from the approved one, higher or lower. This is a client-side check, not a server price lock.
 - `cancel_modem` needs `min_refund_usd`. It re-runs the refund preview and refuses with `refund_changed` when the refund is now lower.
 - A coupon that gives no discount is refused (`coupon_invalid`) instead of being charged at full price.
 - Purchase receipts have no payment ID. Reconcile with `get_payments` and `get_proxies`. `outcome:"unknown"` means check before acting; `outcome:"refunded_not_charged"` means nothing was charged.
@@ -85,79 +126,80 @@ A `rotation_cooldown` error carries `retry_after_seconds`; wait that long. Anyon
 
 Successful tools return JSON text and `structuredContent` with the same `{data, observed_at}` object. `observed_at` is when this process handled the response, not a backend measurement time.
 
-Errors set `isError:true` with `structuredContent.error`: `code` (always lowercase, for example `payment_in_progress`), `message`, and when known `status`, `backend_code` (the original code when it differed), `request_id`, `retry_after_seconds`, `idempotency_key`, `outcome` and `suggested_action`. A 429 is classified by status and `Retry-After`, not by its code. Credential fields are redacted from error details. A failed balance read is an error, never zero.
+Errors set `isError:true` and carry `{error}` as JSON text (not `structuredContent`, which always matches the tool's output schema). `error` has `code` (always lowercase, for example `payment_in_progress`), `message`, `recovery_hint` (one sentence on what to do next), and when known `status`, `backend_code` (the original code when it differed), `request_id`, `retry_after_seconds`, `idempotency_key`, `outcome` and `suggested_action`. A 429 is classified by status and `Retry-After`, not by its code. When a plan is out of stock, the error lists up to five plans that are in stock now. Credential fields are redacted from error details. A failed balance read is an error, never zero.
 
 ## Tool catalog
 
-Every name begins with `coronium_`. "directory" marks the tools in the `directory` profile. Exact arguments come from `tools/list`.
+Every name begins with `coronium_`. "buyer" and "directory" mark the tools in those profiles. Exact arguments come from `tools/list`.
 
 <!-- TOOL_CATALOG -->
-- `coronium_login` (auth). Required: none.
+- `coronium_apply_modem_settings` (write). Required: `proxy`, `confirm`.
+- `coronium_archive_ticket` (write). Required: `ticket_id`, `confirm`.
+- `coronium_build_pool_proxy_url` (write). Required: `id`.
+- `coronium_build_saved_pool_session_url` (write). Required: `id`.
+- `coronium_buy_modems_with_balance` (spends money, needs CORONIUM_ENABLE_SPENDING=1, buyer). Required: `tariff_id`, `quantity`, `funding_source`, `expected_total_usd`, `confirm`, `idempotency_key`.
+- `coronium_buy_pool_with_balance` (spends money, needs CORONIUM_ENABLE_SPENDING=1). Required: `tariff_id`, `expected_total_usd`, `confirm`, `idempotency_key`.
+- `coronium_cancel_modem` (cancels with refund, needs CORONIUM_ENABLE_SPENDING=1). Required: `proxy`, `min_refund_usd`, `confirm`.
+- `coronium_cancel_pool_key` (cancels with refund, needs CORONIUM_ENABLE_SPENDING=1). Required: `id`, `confirm`, `idempotency_key`.
+- `coronium_change_proxy_password` (write). Required: `proxy`, `confirm`.
+- `coronium_check_coupon` (read). Required: `code`.
 - `coronium_check_token` (read, directory). Required: none.
-- `coronium_logout` (auth). Required: none.
-- `coronium_get_account` (read, directory). Required: none.
-- `coronium_get_balance` (read, directory). Required: none.
-- `coronium_get_crypto_balance` (write). Required: none.
-- `coronium_get_credit_cards` (read). Required: none.
-- `coronium_get_low_balance_threshold` (read). Required: none.
-- `coronium_set_low_balance_threshold` (write). Required: `thresholds`.
-- `coronium_get_payments` (read). Required: none.
-- `coronium_get_subscriptions` (read). Required: none.
-- `coronium_get_webhook` (read, directory). Required: none.
-- `coronium_set_webhook` (write). Required: `webhook_url`, `confirm`.
+- `coronium_close_pool_session` (write). Required: `confirm`.
+- `coronium_create_ticket` (write, directory). Required: `subject`, `message`, `confirm`.
+- `coronium_delete_saved_pool_session` (write). Required: `id`, `confirm`.
 - `coronium_delete_webhook` (write). Required: `confirm`.
-- `coronium_rotate_webhook_secret` (write). Required: `confirm`.
-- `coronium_test_webhook` (write). Required: `confirm`.
-- `coronium_get_proxies` (read, directory). Required: none.
+- `coronium_get_account` (read, directory). Required: none.
+- `coronium_get_balance` (read, buyer, directory). Required: none.
+- `coronium_get_capabilities` (read, buyer, directory). Required: none.
+- `coronium_get_credit_cards` (read). Required: none.
+- `coronium_get_crypto_balance` (write, buyer). Required: none.
+- `coronium_get_low_balance_threshold` (read). Required: none.
+- `coronium_get_openvpn_config` (write, directory). Required: `proxy`.
+- `coronium_get_p0f_options` (read). Required: `proxy`.
+- `coronium_get_payment_status` (read, buyer). Required: `payment_id`.
+- `coronium_get_payments` (read). Required: none.
+- `coronium_get_pool_carriers` (read). Required: `country`.
+- `coronium_get_pool_stock` (read). Required: none.
+- `coronium_get_proxies` (read, buyer, directory). Required: none.
 - `coronium_get_proxy` (read, directory). Required: `proxy`.
 - `coronium_get_proxy_health` (read, directory). Required: none.
-- `coronium_test_modem` (write, directory). Required: `proxy`.
-- `coronium_replace_modem` (write, directory). Required: `proxy`, `confirm`.
-- `coronium_get_openvpn_config` (write, directory). Required: `proxy`.
-- `coronium_restart_modem` (write). Required: `proxy`, `confirm`.
-- `coronium_rotate_modem` (write, directory). Required: `proxy_identifier`, `confirm`.
-- `coronium_get_rotation_status` (read, directory). Required: `proxy`.
-- `coronium_set_rotation_interval` (write). Required: `proxy`, `interval_seconds`, `confirm`.
-- `coronium_change_proxy_password` (write). Required: `proxy`, `confirm`.
-- `coronium_set_modem_metadata` (write). Required: `proxy`, `metadata`.
-- `coronium_get_p0f_options` (read). Required: `proxy`.
-- `coronium_set_modem_os` (write). Required: `proxy`, `os`, `confirm`.
-- `coronium_apply_modem_settings` (write). Required: `proxy`, `confirm`.
-- `coronium_preview_modem_cancellation` (read). Required: `proxy`.
-- `coronium_cancel_modem` (cancels with refund, needs CORONIUM_ENABLE_SPENDING=1). Required: `proxy`, `min_refund_usd`, `confirm`.
-- `coronium_set_white_list` (write). Required: `proxy`, `white_list`, `confirm`.
-- `coronium_get_usage` (read). Required: `proxy`.
-- `coronium_start_speed_test` (write). Required: `proxy`, `confirm`.
-- `coronium_get_speed_test` (read). Required: `proxy`.
-- `coronium_revoke_openvpn` (write). Required: `proxy`, `confirm`.
-- `coronium_list_countries` (read, directory). Required: none.
-- `coronium_list_tariffs` (read, directory). Required: none.
-- `coronium_list_free_modems` (read, directory). Required: none.
-- `coronium_check_coupon` (read). Required: `code`.
 - `coronium_get_renewal_quote` (read, directory). Required: `modems`.
-- `coronium_get_payment_status` (read). Required: `payment_id`.
-- `coronium_buy_modems_with_balance` (spends money, needs CORONIUM_ENABLE_SPENDING=1). Required: `tariff_id`, `quantity`, `funding_source`, `expected_total_usd`, `confirm`, `idempotency_key`.
-- `coronium_renew_modems_with_balance` (spends money, needs CORONIUM_ENABLE_SPENDING=1). Required: `modems`, `funding_source`, `expected_total_usd`, `confirm`, `idempotency_key`.
-- `coronium_list_tickets` (read, directory). Required: none.
+- `coronium_get_rotation_status` (read, buyer, directory). Required: `proxy`.
+- `coronium_get_speed_test` (read). Required: `proxy`.
+- `coronium_get_subscriptions` (read). Required: none.
 - `coronium_get_ticket` (read, directory). Required: `ticket_id`.
-- `coronium_create_ticket` (write, directory). Required: `subject`, `message`, `confirm`.
-- `coronium_reply_to_ticket` (write, directory). Required: `ticket_id`, `message`, `confirm`.
-- `coronium_archive_ticket` (write). Required: `ticket_id`, `confirm`.
-- `coronium_list_pool_tariffs` (read). Required: none.
-- `coronium_get_pool_stock` (read). Required: none.
-- `coronium_get_pool_carriers` (read). Required: `country`.
+- `coronium_get_usage` (read). Required: `proxy`.
+- `coronium_get_webhook` (read, directory). Required: none.
+- `coronium_list_countries` (read, directory). Required: none.
+- `coronium_list_free_modems` (read, buyer, directory). Required: none.
 - `coronium_list_pool_keys` (write). Required: none.
-- `coronium_build_pool_proxy_url` (write). Required: `id`.
-- `coronium_buy_pool_with_balance` (spends money, needs CORONIUM_ENABLE_SPENDING=1). Required: `tariff_id`, `expected_total_usd`, `confirm`, `idempotency_key`.
-- `coronium_topup_pool_key` (spends money, needs CORONIUM_ENABLE_SPENDING=1). Required: `id`, `tariff_id`, `expected_total_usd`, `confirm`, `idempotency_key`.
-- `coronium_cancel_pool_key` (cancels with refund, needs CORONIUM_ENABLE_SPENDING=1). Required: `id`, `confirm`, `idempotency_key`.
 - `coronium_list_pool_sessions` (read). Required: none.
-- `coronium_close_pool_session` (write). Required: `confirm`.
+- `coronium_list_pool_tariffs` (read). Required: none.
 - `coronium_list_saved_pool_sessions` (read). Required: none.
+- `coronium_list_tariffs` (read, buyer, directory). Required: none.
+- `coronium_list_tickets` (read, directory). Required: none.
+- `coronium_login` (opt-in, needs CORONIUM_ENABLE_LOGIN_TOOL=1). Required: none.
+- `coronium_logout` (opt-in, needs CORONIUM_ENABLE_LOGIN_TOOL=1). Required: none.
+- `coronium_preview_modem_cancellation` (read). Required: `proxy`.
+- `coronium_quote_purchase` (read, buyer). Required: `tariff_id`, `quantity`.
+- `coronium_renew_modems_with_balance` (spends money, needs CORONIUM_ENABLE_SPENDING=1). Required: `modems`, `funding_source`, `expected_total_usd`, `confirm`, `idempotency_key`.
+- `coronium_replace_modem` (write, buyer, directory). Required: `proxy`, `confirm`.
+- `coronium_reply_to_ticket` (write, directory). Required: `ticket_id`, `message`, `confirm`.
+- `coronium_restart_modem` (write). Required: `proxy`, `confirm`.
+- `coronium_revoke_openvpn` (write). Required: `proxy`, `confirm`.
+- `coronium_rotate_modem` (write, buyer, directory). Required: `proxy_identifier`, `confirm`.
+- `coronium_rotate_webhook_secret` (write). Required: `confirm`.
 - `coronium_save_pool_session` (write). Required: `pool_key_id`, `label`, `params`.
-- `coronium_delete_saved_pool_session` (write). Required: `id`, `confirm`.
-- `coronium_build_saved_pool_session_url` (write). Required: `id`.
-- `coronium_get_capabilities` (read, directory). Required: none.
+- `coronium_set_low_balance_threshold` (write). Required: `thresholds`.
+- `coronium_set_modem_metadata` (write). Required: `proxy`, `metadata`.
+- `coronium_set_modem_os` (write). Required: `proxy`, `os`, `confirm`.
+- `coronium_set_rotation_interval` (write). Required: `proxy`, `interval_seconds`, `confirm`.
+- `coronium_set_webhook` (write). Required: `webhook_url`, `confirm`.
+- `coronium_set_white_list` (write). Required: `proxy`, `white_list`, `confirm`.
+- `coronium_start_speed_test` (write). Required: `proxy`, `confirm`.
+- `coronium_test_modem` (write, buyer, directory). Required: `proxy`.
+- `coronium_test_webhook` (write). Required: `confirm`.
+- `coronium_topup_pool_key` (spends money, needs CORONIUM_ENABLE_SPENDING=1). Required: `id`, `tariff_id`, `expected_total_usd`, `confirm`, `idempotency_key`.
 <!-- /TOOL_CATALOG -->
 
 ## Develop and verify
@@ -171,7 +213,7 @@ npm run test:package
 
 Tests run against a loopback backend with synthetic credentials and a temporary home directory. `test/fixtures/v3-routes.json` lists the public `/api/v3` routes (method, path, auth and field shapes only), and a test checks that every tool's routes exist in it. No test spends money, rotates a real proxy, sends a ticket or touches production. The optional `npm run test:public` makes four unauthenticated catalog reads against production and is not part of CI.
 
-Publishing uses `.github/workflows/publish.yml` on a `publish-v<version>` tag or a manual run from main, with npm trusted publishing or an `NPM_TOKEN` secret.
+Publishing uses `.github/workflows/publish.yml` on a `publish-v<version>` tag or a manual run from main, with npm trusted publishing or an `NPM_TOKEN` secret. After the npm release, `.github/workflows/mcp-registry.yml` publishes `server.json` to the MCP Registry on a `registry-v<version>` tag, signing in with GitHub OIDC.
 
 ## Acceptable use
 

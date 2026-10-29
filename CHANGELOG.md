@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.2.0 - 2026-10-29
+
+Hygiene release: token-only sign-in by default, a short `buyer` profile, a purchase quote tool, recovery hints on every error, and a stricter price check before any spend.
+
+### Migration from 2.1.0
+
+- **`coronium_login` and `coronium_logout` are hidden by default.** They are registered only with `CORONIUM_ENABLE_LOGIN_TOOL=1`, in the `full` and `read-only` profiles, never in `directory` or `buyer`. Use `CORONIUM_API_TOKEN`. `CORONIUM_LOGIN` and `CORONIUM_PASSWORD` in the host environment still work for automatic login.
+- **`expected_total_usd` must match.** Buy, renew, pool buy and top-up now refuse with `price_changed` when the live total differs from the approved one in either direction (2.1.0 refused only when it was higher). Quote, show, approve, then pass the quoted number.
+- **Tool order is alphabetical.** `tools/list` no longer follows module order.
+- **Error details moved to the text content.** Failed calls still set `isError:true`; the `{error}` object is now only in the JSON text, not in `structuredContent`, because clients that check `structuredContent` against the output schema rejected it. Parse `content[0].text`.
+
+### Added
+
+- `buyer` profile (`CORONIUM_TOOL_PROFILE=buyer`): 13 tools for buying and running dedicated proxies. Plans, stock, quote, buy (only with `CORONIUM_ENABLE_SPENDING=1`), payment status, owned proxies, test, rotate and rotation status, replace, balance, crypto balance and capabilities.
+- `coronium_quote_purchase`: the exact USD total for a plan and quantity, with stock checked and an optional coupon applied. Spends nothing. Its `total_usd` is the `expected_total_usd` for the buy.
+- `recovery_hint` on every error: one sentence on what to do next. Out-of-stock errors list up to five plans that are in stock now.
+- `server.json` and `mcpName` (`io.github.coroniumio/coronium-proxy-mcp`) for the MCP Registry, plus a workflow that publishes it with GitHub OIDC.
+- `get_capabilities` reports `login_tool_enabled` and `auth`.
+- Tool titles are now written as words with a capital letter.
+
+### Changed
+
+- The agent guide (`coronium://guide`) explains the quote, approve, buy, poll order and how funding works today: account credit added in the dashboard, or BTC sent to the account's deposit address.
+- The Claude Code plugin pins `coronium-proxy-mcp@2.2.0` (plugin 1.0.1). Its tool list is unchanged.
+
 ## 2.1.0 - 2026-10-17
 
 Directory-ready release: explicit tool profiles, spending off by default, and fixes for rotation, SOCKS5 URLs, error codes, webhooks and tickets against the live customer API.

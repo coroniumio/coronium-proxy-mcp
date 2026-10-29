@@ -75,7 +75,7 @@ const {proxyUrl, finiteNumber} = await import('../dist/formatters.js');
 const {redact, normalizeErrorCode} = await import('../dist/errors.js');
 const {resolveBaseUrl, DEFAULT_BASE_URL} = await import('../dist/config.js');
 const {toolDefinitions} = await import('../dist/tool.js');
-const {DIRECTORY_TOOLS} = await import('../dist/profiles.js');
+const {DIRECTORY_TOOLS, BUYER_TOOLS} = await import('../dist/profiles.js');
 const routeFixture = JSON.parse(readFileSync(new URL('./fixtures/v3-routes.json', import.meta.url), 'utf8'));
 
 async function connect() {
@@ -91,17 +91,17 @@ async function call(name, args = {}, client) {
     return client.callTool({name: `coronium_${name}`, arguments: args}, undefined, {timeout: 10_000});
 }
 function data(result) {assert.notEqual(result.isError, true, JSON.stringify(result)); assert.deepEqual(JSON.parse(result.content[0].text), result.structuredContent); return result.structuredContent.data;}
-function error(result, code) {assert.equal(result.isError, true); if (code) assert.equal(result.structuredContent?.error?.code, code); return result.structuredContent?.error;}
+function error(result, code) {assert.equal(result.isError, true); assert.equal(result.structuredContent, undefined); const text = result.content[0].text; const detail = text.startsWith('{') ? JSON.parse(text).error : {message: text}; if (code) assert.equal(detail?.code, code); return detail;}
 function last(path) {return requests.filter(request => request.path === path).at(-1);}
-beforeEach(() => {requests = []; overrides = new Map(); config.readOnly = false; config.profile = 'full'; config.spendingEnabled = true; config.login = undefined; config.password = undefined; config.autoLoginOn401 = true; config.tokenEncryptionKey = undefined; config.timeoutMs = 30_000; config.actionTimeoutMs = 180_000; tokenStore.set('fixture-token');});
+beforeEach(() => {requests = []; overrides = new Map(); config.readOnly = false; config.profile = 'full'; config.spendingEnabled = true; config.loginToolEnabled = false; config.login = undefined; config.password = undefined; config.autoLoginOn401 = true; config.tokenEncryptionKey = undefined; config.timeoutMs = 30_000; config.actionTimeoutMs = 180_000; tokenStore.set('fixture-token');});
 afterEach(async () => {await Promise.all(connections.splice(0).map(async ({client, server}) => {await client.close(); await server.close();}));});
 after(async () => {await new Promise(resolve => backend.close(resolve)); rmSync(home, {recursive: true, force: true});});
 
 test('MCP initialization, all tool schemas, annotations, resources and prompts', async () => {
     const client = await connect();
-    assert.equal(client.getServerVersion().version, '2.1.0');
+    assert.equal(client.getServerVersion().version, '2.2.0');
     const {tools} = await client.listTools();
-    assert.equal(tools.length, 66);
+    assert.equal(tools.length, 65);
     assert.equal(new Set(tools.map(tool => tool.name)).size, tools.length);
     for (const tool of tools) {
         assert.equal(tool.inputSchema.type, 'object', tool.name);
@@ -475,7 +475,7 @@ test('read-only mode hides side-effecting GETs and mutations, permits pure POST 
     const client = await connect();
     const names = (await client.listTools()).tools.map(tool => tool.name);
     for (const name of ['buy_modems_with_balance', 'cancel_modem', 'get_crypto_balance', 'list_pool_keys', 'rotate_modem', 'test_modem', 'test_webhook']) assert(!names.includes(`coronium_${name}`), name);
-    assert(names.includes('coronium_login'));
+    assert(!names.includes('coronium_login'));
     data(await call('get_balance', {}, client));
     data(await call('get_renewal_quote', {modems: [{modem_id: ids.modem, days: 30}]}, client));
     data(await call('preview_modem_cancellation', {proxy: ids.modem}, client));
@@ -486,7 +486,7 @@ test('read-only mode hides side-effecting GETs and mutations, permits pure POST 
 });
 
 test('explicit logout prevents configured automatic login; explicit login restores it without leaking a token', async () => {
-    config.login = 'fixture@example.invalid'; config.password = 'fixture-password';
+    config.login = 'fixture@example.invalid'; config.password = 'fixture-password'; config.loginToolEnabled = true;
     const client = await connect();
     data(await call('logout', {}, client));
     error(await call('get_balance', {}, client), 'not_authenticated');
@@ -535,7 +535,7 @@ test('real stdio transport starts cleanly, accepts API_KEY alias and exposes val
     let stderr = ''; transport.stderr?.on('data', chunk => {stderr += chunk;});
     try {
         await client.connect(transport);
-        assert.equal(client.getServerVersion().version, '2.1.0');
+        assert.equal(client.getServerVersion().version, '2.2.0');
         assert.equal(data(await call('get_balance', {}, client)).account_credit.amount, 320);
         assert.equal(last('/account').headers.authorization, 'Bearer alias-fixture-token');
         assert.equal(stderr, '');
@@ -612,7 +612,94 @@ test('each profile registers exactly its checked-in tool list', async () => {
     assert.deepEqual(await toolNames('full', false), expectedProfile('full'));
     assert.deepEqual(await toolNames('full', true), expectedProfile('full-spending'));
     assert.deepEqual(await toolNames('read-only', true), expectedProfile('read-only'));
+    assert.deepEqual(await toolNames('buyer', false), expectedProfile('buyer'));
+    assert.deepEqual(await toolNames('buyer', true), expectedProfile('buyer-spending'));
     assert.deepEqual(expectedProfile('directory'), [...DIRECTORY_TOOLS].sort());
+    assert.deepEqual(expectedProfile('buyer-spending'), [...BUYER_TOOLS].sort());
+});
+
+// ---- 2.2.0: login opt-in, buyer profile, stable order, recovery hints, exact-total check ----
+
+test('the password login tool is off in every profile unless CORONIUM_ENABLE_LOGIN_TOOL is set, and never in directory or buyer', async () => {
+    for (const profile of ['full', 'buyer', 'directory', 'read-only']) {
+        const names = await toolNames(profile, true);
+        assert(!names.includes('coronium_login') && !names.includes('coronium_logout'), profile);
+    }
+    config.loginToolEnabled = true;
+    for (const profile of ['full', 'read-only']) assert((await toolNames(profile, true)).includes('coronium_login'), profile);
+    for (const profile of ['buyer', 'directory']) assert(!(await toolNames(profile, true)).includes('coronium_login'), profile);
+});
+
+test('tools/list order is alphabetical and identical across sessions', async () => {
+    for (const profile of ['full', 'buyer', 'directory', 'read-only']) {
+        config.profile = profile; config.readOnly = profile === 'read-only';
+        const first = (await (await connect()).listTools()).tools.map(tool => tool.name);
+        const second = (await (await connect()).listTools()).tools.map(tool => tool.name);
+        assert.deepEqual(first, [...first].sort(), profile);
+        assert.deepEqual(first, second, profile);
+    }
+});
+
+test('every tool has a title, both hints and an output schema in every profile', async () => {
+    config.loginToolEnabled = true;
+    for (const profile of ['full', 'buyer', 'directory', 'read-only']) {
+        config.profile = profile; config.readOnly = profile === 'read-only';
+        for (const tool of (await (await connect()).listTools()).tools) {
+            assert.equal(typeof tool.title, 'string', tool.name);
+            assert.equal(typeof tool.annotations.readOnlyHint, 'boolean', tool.name);
+            assert.equal(typeof tool.annotations.destructiveHint, 'boolean', tool.name);
+            assert.equal(tool.outputSchema.type, 'object', tool.name);
+            assert.doesNotMatch(tool.description, /\btrial\b|\bfree (proxy|proxies|plan|credit)|usdt (spend|pay)|stripe pay|x402|\bSPT\b/i, tool.name);
+        }
+    }
+});
+
+test('buyer profile: about ten tools, token-only auth, and with spending off it cannot spend', async () => {
+    const names = await toolNames('buyer', false);
+    assert(names.length >= 9 && names.length <= 14, String(names.length));
+    for (const name of MONEY_TOOLS) assert(!names.includes(name), name);
+    const client = await connect();
+    const checkToken = (await client.listTools()).tools.find(tool => tool.name === 'coronium_check_token');
+    assert.equal(checkToken, undefined);
+    const result = await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}, client);
+    assert.equal(result.isError, true);
+    await assert.rejects(new CoroniumAPI().payment('/payment/buy-with-account-credit', {}, randomUUID()), failure => failure.details.code === 'spending_disabled');
+    assert(!requests.some(request => request.path.startsWith('/payment/')));
+    const capabilities = data(await call('get_capabilities', {}, client));
+    assert.equal(capabilities.profile, 'buyer');
+    assert.equal(capabilities.spending_enabled, false);
+    assert.equal(capabilities.login_tool_enabled, false);
+});
+
+test('buyer profile with spending on: quote then buy with the quoted total', async () => {
+    config.profile = 'buyer'; config.spendingEnabled = true;
+    const client = await connect();
+    const quote = data(await call('quote_purchase', {tariff_id: ids.tariff, quantity: 2}, client));
+    assert.equal(quote.total_usd, 258);
+    assert.equal(quote.expected_total_usd, 258);
+    assert.equal(quote.plan.stock, 8);
+    assert(!requests.some(request => request.path.startsWith('/payment/')));
+    data(await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 2, funding_source: 'account_credit', expected_total_usd: quote.total_usd, confirm: true, idempotency_key: randomUUID()}, client));
+    assert.equal(requests.filter(request => request.path === '/payment/buy-with-account-credit').length, 1);
+    const guide = (await client.readResource({uri: 'coronium://guide'})).contents[0].text;
+    assert.match(guide, /quote_purchase/);
+    assert.doesNotMatch(guide, /cancel_modem|renew_modems/);
+});
+
+test('errors carry isError:true and a recovery_hint; out of stock lists what is in stock now', async () => {
+    const lowStock = error(await call('quote_purchase', {tariff_id: ids.tariff, quantity: 50}), 'insufficient_stock');
+    assert.match(lowStock.recovery_hint, /Not enough stock for 50 of US/);
+    assert.match(lowStock.recovery_hint, /coronium_list_free_modems/);
+    assert.equal(lowStock.details.available, 8);
+    const unknown = error(await call('quote_purchase', {tariff_id: ids.second, quantity: 1}), 'tariff_unavailable');
+    assert.match(unknown.recovery_hint, /In stock now: .*US, \$129, 8 in stock/);
+    tokenStore.clear();
+    const auth = error(await call('get_balance'), 'not_authenticated');
+    assert.match(auth.recovery_hint, /CORONIUM_API_TOKEN/);
+    overrides.set('POST /payment/buy-with-account-credit', (_, res) => json(res, {error: 'Insufficient balance', code: 'INSUFFICIENT_BALANCE', required: 129, available: 3}, 402));
+    tokenStore.set('fixture-token');
+    const broke = error(await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}), 'insufficient_balance');
+    assert.match(broke.recovery_hint, /dashboard\.coronium\.io/);
 });
 
 test('directory profile: no money, login, OS or wallet tools, no token argument, no spending words in the guide', async () => {
@@ -713,9 +800,10 @@ test('a synchronously refunded out-of-stock purchase is refunded_not_charged, no
     assert.equal(detail.retry_after_seconds, 300);
 });
 
-test('a higher current price or an unusable coupon refuses before any payment call', async () => {
+test('a current price that differs from the approved total, or an unusable coupon, refuses before any payment call', async () => {
     const base = {tariff_id: ids.tariff, quantity: 2, funding_source: 'account_credit', confirm: true, idempotency_key: randomUUID()};
     error(await call('buy_modems_with_balance', {...base, expected_total_usd: 200}), 'price_changed');
+    error(await call('buy_modems_with_balance', {...base, expected_total_usd: 300}), 'price_changed');
     error(await call('buy_modems_with_balance', {...base, coupon: 'EXPIRED', expected_total_usd: 258}), 'coupon_invalid');
     overrides.set('POST /payment/renewal-quote', (_, res, record) => json(res, {total_usd: 150, line_items: record.body.modems.map(modem => ({...modem, usd: 150}))}));
     error(await call('renew_modems_with_balance', {modems: [{modem_id: ids.modem, days: 30}], funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}), 'price_changed');
@@ -734,7 +822,7 @@ test('cancel re-runs the preview and refuses below the approved refund floor; co
     const client = await connect();
     const results = await Promise.all([call('replace_modem', {proxy: ids.modem, confirm: true}, client), call('replace_modem', {proxy: ids.modem, confirm: true}, client)]);
     assert.equal(results.filter(result => result.isError).length, 1);
-    assert.equal(results.find(result => result.isError).structuredContent.error.code, 'modem_action_in_progress');
+    assert.equal(error(results.find(result => result.isError)).code, 'modem_action_in_progress');
     assert.equal(requests.filter(request => request.path.endsWith('/replace')).length, 1);
 });
 
@@ -779,6 +867,7 @@ test('webhook tools: set warns about automatic replacement; delete and secret ro
 });
 
 test('login accepts a non-email account name', async () => {
+    config.loginToolEnabled = true;
     data(await call('login', {login: 'reseller_account', password: 'fixture-password'}));
     assert.deepEqual(last('/get-token').body, {login: 'reseller_account', password: 'fixture-password'});
 });
@@ -798,6 +887,15 @@ test('public files carry no internal details, long dashes or non-public contact 
         assert.doesNotMatch(text, /farmer|koef|ts-api|home\/projects|mongodb|\.(?:js|ts):\d+|security@|support@/i, file);
         if (file !== 'CHANGELOG.md') assert.doesNotMatch(text, /[\u2013\u2014]/, file);
     }
+});
+
+test('server.json and package.json agree on registry name and version', () => {
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    const server = JSON.parse(readFileSync(new URL('../server.json', import.meta.url), 'utf8'));
+    assert.equal(server.name, pkg.mcpName);
+    assert.equal(server.version, pkg.version);
+    assert.deepEqual(server.packages.map(entry => [entry.registryType, entry.identifier, entry.version]), [['npm', pkg.name, pkg.version]]);
+    assert(server.description.length <= 100);
 });
 
 // Runs last: every request any tool made in this file maps to a fixture route.

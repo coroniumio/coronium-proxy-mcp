@@ -1,7 +1,7 @@
 {
   "name": "coronium-mobile-proxies",
   "displayName": "Coronium Mobile Proxies",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Check the health of the dedicated 4G/5G mobile proxies you rent from Coronium.io, rotate their IP, get connection details, compare plans and renewal quotes, and open support tickets, from Claude Code. It cannot make purchases.",
   "author": {
     "name": "Coronium",

@@ -113,7 +113,7 @@ export function assertSpendingAllowed(): void {
     if (spendingAllowed(config.profile, config.spendingEnabled)) return;
     throw new CoroniumError({
         code: "spending_disabled",
-        message: "Spending and refund actions are turned off. They need CORONIUM_TOOL_PROFILE=full and CORONIUM_ENABLE_SPENDING=1. Use https://dashboard.coronium.io to pay.",
+        message: "Spending and refund actions are turned off. They need CORONIUM_TOOL_PROFILE=full or buyer, and CORONIUM_ENABLE_SPENDING=1. Use https://dashboard.coronium.io to pay.",
         suggested_action: "use_dashboard",
     });
 }
@@ -151,7 +151,7 @@ export class CoroniumAPI {
         const current = tokenStore.get();
         if (current) return current;
         if (!config.autoLoginOn401 || this.autoLoginDisabled || !config.login || !config.password) {
-            throw new CoroniumError({code: "not_authenticated", message: "Set CORONIUM_API_TOKEN (or CORONIUM_API_KEY), or log in with CORONIUM_LOGIN/CORONIUM_PASSWORD.", suggested_action: "authenticate"});
+            throw new CoroniumError({code: "not_authenticated", message: "Set CORONIUM_API_TOKEN in the MCP host configuration. Create one at https://dashboard.coronium.io under Account, API Access.", suggested_action: "authenticate"});
         }
         if (!this.inFlightLogin) {
             this.inFlightLogin = this.login(config.login, config.password)

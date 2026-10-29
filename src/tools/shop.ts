@@ -14,7 +14,7 @@ const PRICE_TOLERANCE_USD = 0.005;
 const RECONCILE_STEP = "If this receipt has no payment ID, confirm delivery with coronium_get_proxies and the charge with coronium_get_payments. Never buy again to fix an unclear result; open a ticket quoting the idempotency key and request ID instead.";
 
 const couponField = z.string().min(1).max(128).optional();
-const fundingSource = z.enum(["account_credit", "btc"]).describe("Required. account_credit spends USD account credit; btc spends the native BTC balance at the live rate. USDT and cards are not supported by these tools.");
+const fundingSource = z.enum(["account_credit", "btc"]).describe("Required. account_credit spends USD account credit; btc spends the native BTC balance at the live rate.");
 const renewalFields = {
     modems: z.array(z.object({modem_id: idSchema, days: z.number().int().min(1).max(90)}).strict()).min(1).max(100)
         .refine(rows => new Set(rows.map(row => row.modem_id)).size === rows.length, "Each modem must appear only once."),
@@ -50,11 +50,13 @@ async function couponValue(coupon: string): Promise<unknown> {
     return discount;
 }
 
-function assertWithinApproval(currentUsd: number, approvedUsd: number): void {
-    if (currentUsd <= approvedUsd + PRICE_TOLERANCE_USD) return;
+// The live total must equal the approved one. A lower price is refused too:
+// it usually means a different plan, quantity or coupon than the user saw.
+export function assertMatchesApproval(currentUsd: number, approvedUsd: number): void {
+    if (Math.abs(currentUsd - approvedUsd) <= PRICE_TOLERANCE_USD) return;
     throw new CoroniumError({code: "price_changed",
-        message: `The current total is $${currentUsd.toFixed(2)}, higher than the $${approvedUsd.toFixed(2)} the user approved. Nothing was charged. Show the new total and ask again.`,
-        suggested_action: "requote_and_confirm"});
+        message: `The current total is $${currentUsd.toFixed(2)}, not the $${approvedUsd.toFixed(2)} the user approved. Nothing was charged. Show the new total and ask again.`,
+        suggested_action: "requote_and_confirm", details: {current_total_usd: currentUsd, approved_total_usd: approvedUsd}});
 }
 
 function lineMatches(lines: ApiObject[], modem: RenewalLine): boolean {
@@ -90,14 +92,40 @@ function chargeReport(receipt: ApiObject, approvedUsd: number): Record<string, u
     return {approved_usd: approvedUsd, charged_usd: charged, within_approval: charged <= approvedUsd + PRICE_TOLERANCE_USD};
 }
 
+function tariffSummary(tariff: ApiObject): Record<string, unknown> {
+    return {tariff_id: String(tariff._id), name: tariff.name ?? null, country_code: tariff.country_code ?? null,
+        carrier: tariff.carrier_name ?? null, period: tariff.period ?? null,
+        price_usd: tariff.price ?? null, stock: tariff.stock ?? null};
+}
+
+// Up to five plans that can fill this quantity now, same country first, cheapest first.
+function inStockAlternatives(tariffs: ApiObject[], quantity: number, excludeId: string, countryCode?: string): Record<string, unknown>[] {
+    const fits = tariffs.filter(row => String(row._id) !== excludeId && typeof row.stock === "number" && row.stock >= quantity);
+    const sameCountry = countryCode ? fits.filter(row => row.country_code === countryCode) : [];
+    const pool = sameCountry.length ? sameCountry : fits;
+    return pool.sort((a, b) => Number(a.price) - Number(b.price)).slice(0, 5).map(tariffSummary);
+}
+
+function stockHint(label: string, alternatives: Record<string, unknown>[]): string {
+    const listed = alternatives.map(row => `${row.name ?? row.tariff_id} (${row.country_code}, $${row.price_usd}, ${row.stock} in stock)`).join("; ");
+    const inStock = listed ? ` In stock now: ${listed}.` : "";
+    return `${label}${inStock} Call coronium_list_free_modems for live counts.`;
+}
+
 async function currentTariff(tariffId: string, quantity: number, countryCode?: string): Promise<ApiObject> {
     const tariffs = arrayResponse(await api.publicGet("/tariffs/available"), "Available tariffs");
     const tariff = tariffs.find(row => String(row._id) === tariffId);
     if (!tariff || (countryCode && tariff.country_code !== countryCode)) {
-        throw new CoroniumError({code: "tariff_unavailable", message: "The tariff is unavailable or does not match the requested country.", suggested_action: "list_tariffs"});
+        const alternatives = inStockAlternatives(tariffs, quantity, tariffId, countryCode);
+        throw new CoroniumError({code: "tariff_unavailable", message: "The tariff is unavailable or does not match the requested country.", suggested_action: "list_tariffs",
+            recovery_hint: stockHint("That plan is not on sale right now.", alternatives), details: {in_stock_now: alternatives}});
     }
     if (typeof tariff.stock !== "number" || tariff.stock < quantity) {
-        throw new CoroniumError({code: "insufficient_stock", message: "The current stock snapshot cannot satisfy this quantity.", suggested_action: "list_tariffs"});
+        const alternatives = inStockAlternatives(tariffs, quantity, tariffId, tariff.country_code);
+        const what = [tariff.country_code, tariff.name].filter(Boolean).join(" ");
+        throw new CoroniumError({code: "insufficient_stock", message: "The current stock snapshot cannot satisfy this quantity.", suggested_action: "list_tariffs",
+            recovery_hint: stockHint(`Not enough stock for ${quantity} of ${what || "this plan"} (${tariff.stock ?? 0} available).`, alternatives),
+            details: {available: tariff.stock ?? 0, requested: quantity, in_stock_now: alternatives}});
     }
     return tariff;
 }
@@ -148,13 +176,27 @@ function registerCatalogTools(server: McpServer): void {
         input: {code: z.string().min(1).max(128)}, routes: ["POST /coupons/check"],
         run: async ({code}) => ({response: await api.post("/coupons/check", {coupon_name: code}, {readOnly: true})}),
     });
+    registerTool(server, "coronium_quote_purchase", {
+        description: "Get the exact USD total for buying a dedicated proxy plan: live price times quantity, with an optional coupon applied, after checking current stock. Spends nothing and changes nothing. Show total_usd to the user and get a clear yes before any purchase; that same number is the expected_total_usd for coronium_buy_modems_with_balance. A quote is not a price lock or a stock reservation.",
+        input: {tariff_id: idSchema, quantity: z.number().int().min(1).max(100), coupon: couponField,
+            country_code: countrySchema.optional().describe("Optional guard: refuse if this does not match the plan's country.")},
+        routes: ["GET /tariffs/available", "POST /coupons/check"],
+        run: async ({tariff_id, quantity, coupon, country_code}) => {
+            const tariff = await currentTariff(tariff_id, quantity, country_code);
+            const listTotal = roundCents(Number(tariff.price) * quantity);
+            const total = await currentBuyTotal(tariff, quantity, coupon);
+            return {plan: tariffSummary(tariff), quantity, unit_price_usd: tariff.price, list_total_usd: listTotal,
+                coupon: coupon ?? null, total_usd: total, expected_total_usd: total,
+                next_step: "Show total_usd to the user. Only after a clear yes, buy with expected_total_usd set to this number, confirm:true and a new idempotency_key."};
+        },
+    });
     registerTool(server, "coronium_get_renewal_quote", {
         description: "Get the backend's USD renewal quote for owned proxies (1-90 days each). Refuses partial quotes. Spends nothing and changes nothing. Quotes are not price locks. Payment happens in the dashboard unless spending is enabled in this MCP.",
         input: renewalFields, routes: ["POST /payment/renewal-quote"],
         run: async ({modems, coupon}) => ({quote: await renewalQuote(modems, coupon)}),
     });
     registerTool(server, "coronium_get_payment_status", {
-        description: "Read a payment's current status by its ID. Keep pending and failed states as they are; do not infer delivery from HTTP success alone.",
+        description: "Read a payment's current status by its ID. Use it after a 202 or an unclear purchase result instead of buying again. Keep pending and failed states as they are; do not infer delivery from HTTP success alone.",
         input: {payment_id: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/)}, routes: ["GET /payments/:id/status"],
         run: async ({payment_id}) => ({response: await api.get(`/payments/${encodeURIComponent(payment_id)}/status`)}),
     });
@@ -162,7 +204,7 @@ function registerCatalogTools(server: McpServer): void {
 
 function registerSpendingTools(server: McpServer): void {
     registerTool(server, "coronium_buy_modems_with_balance", {
-        description: "SPENDS MONEY. Buy dedicated proxies from account credit or BTC. Read plan, stock and balance first, show the user the plan, quantity, funding source and total, and get an explicit yes. Pass that total as expected_total_usd: the tool re-reads the price and refuses if it is now higher. Preserve the idempotency key and the whole receipt. No automatic retries; after an unclear result, reconcile instead of buying again.",
+        description: "SPENDS MONEY. Buy dedicated proxies from account credit or BTC. First call coronium_quote_purchase and coronium_get_balance, show the user the plan, quantity, funding source and total, and get an explicit yes. Pass that total as expected_total_usd: the tool re-reads the live price and refuses if it differs. Use one new idempotency_key per purchase and keep it with the whole receipt. On 202 or an unclear result, poll coronium_get_payment_status and coronium_get_proxies; never buy again.",
         input: {tariff_id: idSchema, quantity: z.number().int().min(1).max(100), funding_source: fundingSource, expected_total_usd: expectedTotalField,
             country_code: countrySchema.optional().describe("Optional guard: refuse if this does not match the selected tariff's country."),
             metadata: z.union([z.string().max(8000), z.record(z.unknown())]).optional(), coupon: couponField, want_p0f: z.boolean().optional(), ...paymentFields},
@@ -170,7 +212,7 @@ function registerSpendingTools(server: McpServer): void {
         routes: ["GET /tariffs/available", "POST /coupons/check", "POST /payment/buy-with-account-credit", "POST /payment/buy-modems-with-crypto-balance"],
         run: async ({tariff_id, quantity, funding_source, expected_total_usd, country_code, metadata, coupon, want_p0f, idempotency_key}) => {
             const tariff = await currentTariff(tariff_id, quantity, country_code);
-            assertWithinApproval(await currentBuyTotal(tariff, quantity, coupon), expected_total_usd);
+            assertMatchesApproval(await currentBuyTotal(tariff, quantity, coupon), expected_total_usd);
             // A buy sends only the purchase fields, never a renewal basket.
             const body = {tariff_id, modemCount: quantity, ...couponBody(coupon),
                 ...(metadata !== undefined ? {metadata: metadataText(metadata)} : {}),
@@ -181,13 +223,13 @@ function registerSpendingTools(server: McpServer): void {
         },
     });
     registerTool(server, "coronium_renew_modems_with_balance", {
-        description: "SPENDS MONEY. Renew owned proxies for the given days from account credit or BTC. Get a renewal quote, show the total and get an explicit yes, then pass that total as expected_total_usd: the tool re-quotes and refuses if the total is now higher. Sends modems:[{modem_id,days}] and never a purchase tariff. Preserve the idempotency key and receipt; reconcile after unclear results.",
+        description: "SPENDS MONEY. Renew owned proxies for the given days from account credit or BTC. Get a renewal quote, show the total and get an explicit yes, then pass that total as expected_total_usd: the tool re-quotes and refuses if the total differs. Sends modems:[{modem_id,days}] and never a purchase tariff. Preserve the idempotency key and receipt; reconcile after unclear results.",
         input: {...renewalFields, funding_source: fundingSource, expected_total_usd: expectedTotalField, ...paymentFields},
         access: "write", money: "spends",
         routes: ["POST /payment/renewal-quote", "POST /payment/renew-with-account-credit", "POST /payment/renew-modems-with-crypto-balance"],
         run: async ({modems, coupon, funding_source, expected_total_usd, idempotency_key}) => {
             const quote = await renewalQuote(modems, coupon);
-            assertWithinApproval(quote.total_usd, expected_total_usd);
+            assertMatchesApproval(quote.total_usd, expected_total_usd);
             const path = funding_source === "btc" ? "/payment/renew-modems-with-crypto-balance" : "/payment/renew-with-account-credit";
             const receipt = await api.payment(path, {modems, ...couponBody(coupon)}, idempotency_key);
             return {funding_source, quote_before_submission: quote, ...receipt, charge: chargeReport(receipt, expected_total_usd), next_step: RECONCILE_STEP};

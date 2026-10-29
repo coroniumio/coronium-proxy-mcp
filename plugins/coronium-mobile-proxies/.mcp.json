@@ -2,7 +2,7 @@
   "mcpServers": {
     "coronium": {
       "command": "npx",
-      "args": ["-y", "coronium-proxy-mcp@2.1.0"],
+      "args": ["-y", "coronium-proxy-mcp@2.2.0"],
       "env": {
         "CORONIUM_API_TOKEN": "${user_config.api_token}",
         "CORONIUM_TOOL_PROFILE": "directory",

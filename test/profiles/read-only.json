@@ -28,7 +28,6 @@
   "coronium_list_saved_pool_sessions",
   "coronium_list_tariffs",
   "coronium_list_tickets",
-  "coronium_login",
-  "coronium_logout",
-  "coronium_preview_modem_cancellation"
+  "coronium_preview_modem_cancellation",
+  "coronium_quote_purchase"
 ]

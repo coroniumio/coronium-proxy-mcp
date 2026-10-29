@@ -1,0 +1,15 @@
+[
+  "coronium_buy_modems_with_balance",
+  "coronium_get_balance",
+  "coronium_get_capabilities",
+  "coronium_get_crypto_balance",
+  "coronium_get_payment_status",
+  "coronium_get_proxies",
+  "coronium_get_rotation_status",
+  "coronium_list_free_modems",
+  "coronium_list_tariffs",
+  "coronium_quote_purchase",
+  "coronium_replace_modem",
+  "coronium_rotate_modem",
+  "coronium_test_modem"
+]

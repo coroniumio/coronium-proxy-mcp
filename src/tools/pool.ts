@@ -47,9 +47,9 @@ async function poolPlans(): Promise<PoolPlan[]> {
 async function assertPoolPriceWithinApproval(tariffId: string, approvedUsd: number): Promise<void> {
     const plan = (await poolPlans()).find(row => row._id === tariffId);
     if (!plan) throw new CoroniumError({code: "tariff_unavailable", message: "That pool plan is not in the current catalog.", suggested_action: "list_pool_tariffs"});
-    if (plan.price <= approvedUsd + 0.005) return;
+    if (Math.abs(plan.price - approvedUsd) <= 0.005) return;
     throw new CoroniumError({code: "price_changed",
-        message: `The plan now costs $${plan.price.toFixed(2)}, higher than the $${approvedUsd.toFixed(2)} the user approved. Nothing was charged.`,
+        message: `The plan now costs $${plan.price.toFixed(2)}, not the $${approvedUsd.toFixed(2)} the user approved. Nothing was charged.`,
         suggested_action: "requote_and_confirm"});
 }
 
@@ -88,7 +88,7 @@ export function registerPoolTools(server: McpServer): void {
         run: async ({id, ...params}) => { validateParameters(params); return {response: await api.post(`/account/pool-keys/${id}/proxy-url`, params)}; },
     });
     registerTool(server, "coronium_buy_pool_with_balance", {
-        description: "SPENDS MONEY. Buy a pay-per-GB pool key with USD account credit. Pick a current plan from list_pool_tariffs, show its price and get an explicit yes, then pass that price as expected_total_usd: the tool refuses if the price is now higher. Preserve the idempotency key and the whole receipt.",
+        description: "SPENDS MONEY. Buy a pay-per-GB pool key with USD account credit. Pick a current plan from list_pool_tariffs, show its price and get an explicit yes, then pass that price as expected_total_usd: the tool refuses if the price differs. Preserve the idempotency key and the whole receipt.",
         input: {tariff_id: idSchema, expected_total_usd: expectedTotalField, ...paymentFields}, access: "write", money: "spends",
         routes: ["GET /api/v1/tariffs", "POST /payment/buy-pool-with-account-credit"],
         run: async ({tariff_id, expected_total_usd, idempotency_key}) => {
@@ -97,7 +97,7 @@ export function registerPoolTools(server: McpServer): void {
         },
     });
     registerTool(server, "coronium_topup_pool_key", {
-        description: "SPENDS MONEY. Top up an owned pool key with a pool plan, paid from USD account credit. Show the plan price and get an explicit yes, then pass it as expected_total_usd: the tool refuses if the price is now higher. Retain the idempotency key.",
+        description: "SPENDS MONEY. Top up an owned pool key with a pool plan, paid from USD account credit. Show the plan price and get an explicit yes, then pass it as expected_total_usd: the tool refuses if the price differs. Retain the idempotency key.",
         input: {id: idSchema, tariff_id: idSchema, expected_total_usd: expectedTotalField, ...paymentFields}, access: "write", money: "spends",
         routes: ["GET /api/v1/tariffs", "POST /account/pool-keys/:id/topup"],
         run: async ({id, tariff_id, expected_total_usd, idempotency_key}) => {

@@ -1,0 +1,56 @@
+name: publish-mcp-registry
+# Publishes server.json to the MCP Registry under io.github.coroniumio/*.
+# Run only after the same version is on npm (the registry checks the npm
+# package's mcpName). Trigger: push a registry-v<version> tag, or run by hand from main.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['registry-v*']
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: mcp-registry
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.6
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+      - name: Verify versions match and the package is on npm
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor HEAD origin/main
+          version="$(node -p 'require("./package.json").version')"
+          test "$(node -p 'require("./server.json").version')" = "$version"
+          test "$(node -p 'require("./server.json").packages[0].version')" = "$version"
+          test "$(node -p 'require("./package.json").mcpName')" = "$(node -p 'require("./server.json").name')"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then test "$GITHUB_REF_NAME" = "registry-v$version"; fi
+          test "$(npm view "coronium-proxy-mcp@$version" mcpName)" = "$(node -p 'require("./server.json").name')"
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Download and verify mcp-publisher
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          base_url="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          curl --fail --location --silent --show-error --output "$archive" "$base_url/$archive"
+          curl --fail --location --silent --show-error --output "$archive.sigstore.json" "$base_url/$archive.sigstore.json"
+          cosign verify-blob \
+            --bundle "$archive.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$archive"
+          tar xzf "$archive" mcp-publisher
+          rm -f "$archive" "$archive.sigstore.json"
+      - name: Authenticate with GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+      - name: Publish server.json
+        run: ./mcp-publisher publish

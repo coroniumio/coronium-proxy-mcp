@@ -32,18 +32,33 @@ export interface ToolDefinition {
 export const toolDefinitions = new Map<string, ToolDefinition>();
 
 function title(name: string): string {
-    return name.replace(/^coronium_/, "").replaceAll("_", " ");
+    const words = name.replace(/^coronium_/, "").replaceAll("_", " ");
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+type Registration = () => void;
+
+// Tools are queued per server and registered by name in finishToolRegistration,
+// so tools/list returns the same order in every profile and every release,
+// whatever order the modules happen to define them in.
+const pendingTools = new WeakMap<McpServer, Map<string, Registration>>();
+
+export function finishToolRegistration(server: McpServer): void {
+    const pending = pendingTools.get(server);
+    if (!pending) return;
+    for (const name of [...pending.keys()].sort()) pending.get(name)!();
+    pendingTools.delete(server);
 }
 
 export function registerTool<S extends z.ZodRawShape>(server: McpServer, name: string, options: ToolOptions<S>): void {
     const access: Access = options.access ?? "read";
     const money: MoneyEffect = options.money ?? "none";
     toolDefinitions.set(name, {name, access, money, routes: options.routes});
-    if (!isToolEnabled(config.profile, config.spendingEnabled, name, {access, money})) return;
+    if (!isToolEnabled(config.profile, config.spendingEnabled, name, {access, money}, config.loginToolEnabled)) return;
     // Money tools are always marked destructive so hosts that gate on the hint prompt.
     const destructive: boolean = money !== "none" || (options.destructive ?? false);
     const outputSchema = z.object({data: options.output ?? z.record(z.unknown()), observed_at: z.string()});
-    server.registerTool(name, {
+    const register: Registration = () => server.registerTool(name, {
         title: title(name),
         description: options.description,
         inputSchema: z.object(options.input).strict(),
@@ -56,10 +71,13 @@ export function registerTool<S extends z.ZodRawShape>(server: McpServer, name: s
             const result = outputSchema.parse({data, observed_at: new Date().toISOString()});
             return {content: [{type: "text", text: JSON.stringify(result)}], structuredContent: result};
         } catch (error) {
-            const result = {error: errorDetails(error)};
-            return {isError: true, content: [{type: "text", text: JSON.stringify(result)}], structuredContent: result};
+            // Error details go in the text content only. structuredContent must match
+            // the tool's outputSchema, and some clients reject an error object there.
+            return {isError: true, content: [{type: "text", text: JSON.stringify({error: errorDetails(error)})}]};
         }
     });
+    if (!pendingTools.has(server)) pendingTools.set(server, new Map());
+    pendingTools.get(server)!.set(name, register);
 }
 
 export const idSchema = z.string().regex(/^[a-fA-F0-9]{24}$/, "Expected a 24-character modem, tariff, ticket or key ID.").transform(value => value.toLowerCase());
@@ -69,5 +87,5 @@ export const paymentFields = {
     confirm: z.literal(true).describe("True only after the user authorized this exact purchase, renewal or refund, including its funding source and amount."),
     idempotency_key: z.string().regex(/^[A-Za-z0-9_-]{8,128}$/).describe("A unique UUID per purchase intent. Preserve it if reconciling that same intent; never reuse it for a different order."),
 };
-export const expectedTotalField = usdAmount.describe("The USD total the user approved. The tool re-reads the current price just before sending and refuses if the total is now higher. This is a client-side check, not a server price lock.");
+export const expectedTotalField = usdAmount.describe("The USD total the user approved, as returned by the quote. The tool re-reads the live price just before sending and refuses if the total is now different. This is a client-side check, not a server price lock.");
 export const confirmation = z.literal(true).describe("True only after the user explicitly authorized this disruptive action.");

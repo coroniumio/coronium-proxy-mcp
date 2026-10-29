@@ -1,0 +1,50 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.coroniumio/coronium-proxy-mcp",
+  "title": "Coronium mobile proxies",
+  "description": "Manage your Coronium 4G/5G mobile proxies: test, rotate, replace, plans, stock and quotes.",
+  "repository": {
+    "url": "https://github.com/coroniumio/coronium-proxy-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://www.coronium.io",
+  "version": "2.2.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "coronium-proxy-mcp",
+      "version": "2.2.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "CORONIUM_API_TOKEN",
+          "description": "Dashboard API token from dashboard.coronium.io, Account, API Access.",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "CORONIUM_TOOL_PROFILE",
+          "description": "Which tools to expose: buyer, directory, full (default) or read-only.",
+          "isRequired": false,
+          "format": "string",
+          "choices": [
+            "buyer",
+            "directory",
+            "full",
+            "read-only"
+          ]
+        },
+        {
+          "name": "CORONIUM_ENABLE_SPENDING",
+          "description": "Set to 1 to allow buying from the account balance. Off unless set.",
+          "isRequired": false,
+          "format": "boolean"
+        }
+      ]
+    }
+  ]
+}

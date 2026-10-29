@@ -7,8 +7,8 @@ import {registerTool} from "../tool.js";
 
 function registerCheckToken(server: McpServer): void {
     const description = "Check that the configured API token is accepted by the account API. Returns valid:false for rejected credentials; network failures remain errors.";
-    // The directory build never accepts a token typed into the conversation.
-    if (config.profile === "directory") {
+    // The directory and buyer builds never accept a token typed into the conversation.
+    if (config.profile === "directory" || config.profile === "buyer") {
         registerTool(server, "coronium_check_token", {
             description, input: {}, routes: ["GET /account"],
             run: async () => ({valid: await api.validateToken()}),
@@ -22,9 +22,12 @@ function registerCheckToken(server: McpServer): void {
     });
 }
 
+// coronium_login and coronium_logout are access "auth": they are registered only
+// when the host sets CORONIUM_ENABLE_LOGIN_TOOL=1, because a password passed as a
+// tool argument ends up in the conversation. CORONIUM_API_TOKEN is the normal path.
 export function registerAuthTools(server: McpServer): void {
     registerTool(server, "coronium_login", {
-        description: "Log in using account credentials. Prefer environment credentials over passing secrets through a conversation. Tokens remain in memory unless TOKEN_ENCRYPTION_KEY is configured; no token is returned.",
+        description: "Log in with account credentials. Only present when the host set CORONIUM_ENABLE_LOGIN_TOOL=1. Prefer CORONIUM_API_TOKEN in the host configuration; a password passed here is visible in the conversation. Tokens remain in memory unless TOKEN_ENCRYPTION_KEY is configured; no token is returned.",
         input: {login: z.string().min(1).max(255).optional(), password: z.string().min(1).optional()}, access: "auth",
         routes: ["POST /get-token"],
         run: async ({login, password}) => {

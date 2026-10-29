@@ -1,4 +1,4 @@
-# API boundary (2.1.0, checked 2026-10-17)
+# API boundary (2.2.0; routes checked 2026-10-17)
 
 This package calls the public Coronium customer API only. The default base is `https://api.coronium.io/api/v3`. Plan, country and stock reads need no token; everything else uses `Authorization: Bearer <token>`. Pool plan discovery reads the public catalog at `/api/v1/tariffs` on the same host and keeps only pool plan fields.
 

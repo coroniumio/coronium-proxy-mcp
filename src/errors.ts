@@ -6,6 +6,8 @@ export interface ErrorDetails {
     backend_code?: string;
     message: string;
     suggested_action?: string;
+    // One plain sentence telling the agent what to do next.
+    recovery_hint?: string;
     request_id?: string;
     retry_after_seconds?: number;
     idempotency_key?: string;
@@ -39,10 +41,57 @@ export function redact(value: unknown): unknown {
     return value;
 }
 
+const DASHBOARD = "https://dashboard.coronium.io";
+
+const HINTS_BY_ACTION: Readonly<Record<string, string>> = {
+    authenticate: `Set CORONIUM_API_TOKEN in the MCP host configuration (create it at ${DASHBOARD}, Account, API Access) and restart the MCP.`,
+    check_rotation_status: "Call coronium_get_rotation_status for this proxy and wait for state done or unchanged. Do not rotate again or replace the proxy yet.",
+    check_state_before_retrying: "The outcome is unclear. Check coronium_get_payment_status, coronium_get_proxies or coronium_get_balance before doing anything else, and do not repeat the request.",
+    confirm_without_coupon: "Tell the user the coupon gives no discount now and ask whether to continue at the full price.",
+    contact_support: `Nothing more to try from here. Open a ticket at ${DASHBOARD} and quote request_id if there is one.`,
+    list_owned_proxies: "Call coronium_get_proxies to see which proxies this account owns, then retry with one of those.",
+    list_pool_tariffs: "Call coronium_list_pool_tariffs for the current pay-per-GB plans and pick one of those.",
+    list_tariffs: "Call coronium_list_tariffs or coronium_list_free_modems for live stock and pick a plan that is in stock.",
+    nothing_was_charged_choose_another_plan_or_retry_later: "Nothing was charged and the amount is back on the balance. Pick another plan from coronium_list_tariffs, or try again after retry_after_seconds.",
+    preview_and_confirm_again: "Run the preview again, show the user the new figure and ask again before acting.",
+    requote_and_confirm: "Call coronium_quote_purchase (or coronium_get_renewal_quote for renewals), show the user the new total and ask again.",
+    review_request: "Check the arguments against the tool's input schema and try again.",
+    use_dashboard: `This MCP is not set up to spend. The user can pay at ${DASHBOARD}, or the host can set CORONIUM_ENABLE_SPENDING=1 with the full or buyer profile.`,
+    wait_for_previous_result: "Wait for the earlier call on this proxy to return before acting again.",
+    wait_retry_after_seconds: "Wait retry_after_seconds, then try once more.",
+    wait_retry_after_then_check_rotation_status: "Wait retry_after_seconds, then call coronium_get_rotation_status. Do not replace the proxy because of a cooldown.",
+};
+
+const HINTS_BY_CODE: Readonly<Record<string, string>> = {
+    insufficient_balance: `The balance is too low for this total. A person can add funds at ${DASHBOARD}, or send BTC to the deposit address from coronium_get_crypto_balance and pay with funding_source btc once it confirms. Then quote again.`,
+    insufficient_funds: `The balance is too low for this total. A person can add funds at ${DASHBOARD}, or send BTC to the deposit address from coronium_get_crypto_balance and pay with funding_source btc once it confirms. Then quote again.`,
+    out_of_stock: "That plan just sold out. Call coronium_list_free_modems for live counts and coronium_list_tariffs for plans in stock.",
+    no_stock: "That plan just sold out. Call coronium_list_free_modems for live counts and coronium_list_tariffs for plans in stock.",
+    duplicate_request: "This idempotency key was already used. Reconcile with coronium_get_payment_status or coronium_get_proxies; never buy again with a new key.",
+    payment_delivery_unconfirmed: "The payment went through but delivery is not confirmed yet. Poll coronium_get_payment_status and coronium_get_proxies. Never order again.",
+    not_authenticated: HINTS_BY_ACTION.authenticate,
+};
+
+const FALLBACK_HINT = "Read error.message. Do not repeat a write automatically.";
+
+export function recoveryHint(details: ErrorDetails): string {
+    if (details.recovery_hint) return details.recovery_hint;
+    if (details.outcome === "refunded_not_charged") return HINTS_BY_ACTION.nothing_was_charged_choose_another_plan_or_retry_later;
+    if (details.outcome === "unknown") return HINTS_BY_ACTION.check_state_before_retrying;
+    return HINTS_BY_CODE[details.code]
+        ?? (details.status === 402 ? HINTS_BY_CODE.insufficient_balance : undefined)
+        ?? (details.suggested_action ? HINTS_BY_ACTION[details.suggested_action] : undefined)
+        ?? FALLBACK_HINT;
+}
+
 export function errorDetails(error: unknown): ErrorDetails {
-    if (error instanceof CoroniumError) return redact(error.details) as ErrorDetails;
+    if (error instanceof CoroniumError) {
+        const details = redact(error.details) as ErrorDetails;
+        return {...details, recovery_hint: recoveryHint(details)};
+    }
     const message = error instanceof Error ? error.message : "The tool failed.";
-    return {code: "tool_error", message: String(redact(message)), suggested_action: "review_request"};
+    const details: ErrorDetails = {code: "tool_error", message: String(redact(message)), suggested_action: "review_request"};
+    return {...details, recovery_hint: recoveryHint(details)};
 }
 
 // The backend mixes lowercase codes with uppercase ones such as
