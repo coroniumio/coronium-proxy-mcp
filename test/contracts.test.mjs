@@ -99,7 +99,7 @@ after(async () => {await new Promise(resolve => backend.close(resolve)); rmSync(
 
 test('MCP initialization, all tool schemas, annotations, resources and prompts', async () => {
     const client = await connect();
-    assert.equal(client.getServerVersion().version, '2.2.0');
+    assert.equal(client.getServerVersion().version, '2.2.1');
     const {tools} = await client.listTools();
     assert.equal(tools.length, 65);
     assert.equal(new Set(tools.map(tool => tool.name)).size, tools.length);
@@ -178,7 +178,7 @@ test('purchase uses account credit and the real body, preserving full billing re
     const key = randomUUID();
     const result = data(await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 2, funding_source: 'account_credit', country_code: 'us', coupon: 'SAVE', metadata: {job: 'fixture'}, want_p0f: false, expected_total_usd: 232.2, confirm: true, idempotency_key: key}));
     const request = last('/payment/buy-with-account-credit');
-    assert.deepEqual(request.body, {tariff_id: ids.tariff, modemCount: 2, coupon: {coupon_name: 'SAVE'}, metadata: '{"job":"fixture"}', wantP0f: false});
+    assert.deepEqual(request.body, {tariff_id: ids.tariff, modemCount: 2, max_total_usd: 232.2, coupon: {coupon_name: 'SAVE'}, metadata: '{"job":"fixture"}'});
     assert.equal(request.headers['idempotency-key'], key);
     assert.equal(result.response.charged_usd, 232.2);
     assert.deepEqual(result.charge, {approved_usd: 232.2, charged_usd: 232.2, within_approval: true});
@@ -202,6 +202,10 @@ test('a charge above the approved total, a short delivery and a queued payment a
     assert.deepEqual(queued.charge, {approved_usd: 258, charged_usd: null, within_approval: null});
     assert.equal(queued.delivery.delivery_verified, false);
     assert.equal(queued.response.paymentId, 'fixture-queued');
+    assert.equal(queued.payment_id, 'fixture-queued');
+    assert.equal(queued.pending, true);
+    assert.match(queued.next_step, /coronium_get_payment_status with payment_id fixture-queued/);
+    assert.match(queued.delivery.next_step, /Never buy again/);
 });
 
 test('BTC purchase selects BTC route, not USD credit', async () => {
@@ -227,7 +231,7 @@ test('renewal quote and checkout use modem IDs/days, normalize IDs and omit tari
     const modems = [{modem_id: ids.second.toUpperCase(), days: 30}];
     const result = data(await call('renew_modems_with_balance', {modems, coupon: 'SAVE', funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}));
     assert.equal(result.quote_before_submission.total_usd, 129);
-    assert.deepEqual(last('/payment/renew-with-account-credit').body, {modems: [{modem_id: ids.second, days: 30}], coupon: {coupon_name: 'SAVE'}});
+    assert.deepEqual(last('/payment/renew-with-account-credit').body, {modems: [{modem_id: ids.second, days: 30}], max_total_usd: 129, coupon: {coupon_name: 'SAVE'}});
     assert(!('tariff_id' in last('/payment/renew-with-account-credit').body));
     data(await call('renew_modems_with_balance', {modems, funding_source: 'btc', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}));
     assert(last('/payment/renew-modems-with-crypto-balance'));
@@ -535,7 +539,7 @@ test('real stdio transport starts cleanly, accepts API_KEY alias and exposes val
     let stderr = ''; transport.stderr?.on('data', chunk => {stderr += chunk;});
     try {
         await client.connect(transport);
-        assert.equal(client.getServerVersion().version, '2.2.0');
+        assert.equal(client.getServerVersion().version, '2.2.1');
         assert.equal(data(await call('get_balance', {}, client)).account_credit.amount, 320);
         assert.equal(last('/account').headers.authorization, 'Bearer alias-fixture-token');
         assert.equal(stderr, '');
@@ -898,6 +902,90 @@ test('server.json and package.json agree on registry name and version', () => {
     assert(server.description.length <= 100);
 });
 
+// ---- 2.2.1: server-side cap, payment IDs, require:["p0f"], clean plan names ----
+
+const p0fTariffs = (count) => (_, res) => json(res, {data: [{_id: ids.tariff, name: '"T-Mobile" Carrier | 30-Day Plan\t\t', country_code: 'US', country_id: ids.country, carrier_id: ids.second, stock: 8, price: 129, period: 30, features: {p0f: {count, all: false}}}]});
+
+test('2.2.1 buy sends the approved total as max_total_usd with an Idempotency-Key, and renew does too', async () => {
+    const key = randomUUID();
+    data(await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'btc', expected_total_usd: 129, confirm: true, idempotency_key: key}));
+    const request = last('/payment/buy-modems-with-crypto-balance');
+    assert.equal(request.body.max_total_usd, 129);
+    assert.equal(request.headers['idempotency-key'], key);
+    assert.equal(request.body.require, undefined);
+    assert.equal(request.body.wantP0f, undefined);
+    const renewKey = randomUUID();
+    const renewed = data(await call('renew_modems_with_balance', {modems: [{modem_id: ids.modem, days: 30}], funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: renewKey}));
+    const renew = last('/payment/renew-with-account-credit');
+    assert.deepEqual(renew.body, {modems: [{modem_id: ids.modem, days: 30}], max_total_usd: 129});
+    assert.equal(renew.headers['idempotency-key'], renewKey);
+    assert.equal(renewed.pending, false);
+});
+
+test('2.2.1 a 200 receipt surfaces payment_id and tells the agent to poll it', async () => {
+    overrides.set('POST /payment/buy-with-account-credit', (_, res) => json(res, {result: 'ok', paymentId: 'pay-200', charged_usd: 129, currency: 'USD', data: [{_id: ids.second}]}));
+    const result = data(await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}));
+    assert.equal(result.payment_id, 'pay-200');
+    assert.equal(result.pending, false);
+    assert.equal(result.request.http_status, 200);
+    assert.match(result.next_step, /payment_id pay-200/);
+});
+
+test('2.2.1 the server refusing above max_total_usd (409 price_changed) says nothing was charged and how to re-approve', async () => {
+    overrides.set('POST /payment/buy-with-account-credit', (_, res) => json(res, {error: 'The total is $139.00, above the approved max_total_usd of $129.00. Nothing was charged.', code: 'price_changed', quote: {total_usd: 139}}, 409));
+    const detail = error(await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}), 'price_changed');
+    assert.equal(detail.status, 409);
+    assert.equal(detail.outcome, undefined);
+    assert.equal(detail.details.quote.total_usd, 139);
+    assert.match(detail.recovery_hint, /Nothing was charged/);
+    assert.match(detail.recovery_hint, /new idempotency_key/);
+});
+
+test('2.2.1 a 503 payment_delivery_unconfirmed error carries payment_id and a poll hint, never a re-buy', async () => {
+    overrides.set('POST /payment/buy-with-account-credit', (_, res) => json(res, {error: 'Payment delivery could not be confirmed. Check payment status or contact support before retrying.', code: 'PAYMENT_DELIVERY_UNCONFIRMED', paymentId: 'pay-503', charged_usd: 129}, 503));
+    const detail = error(await call('buy_modems_with_balance', {tariff_id: ids.tariff, quantity: 1, funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}), 'payment_delivery_unconfirmed');
+    assert.equal(detail.payment_id, 'pay-503');
+    assert.equal(detail.outcome, 'unknown');
+    assert.match(detail.recovery_hint, /coronium_get_payment_status with payment_id pay-503/);
+    assert.match(detail.recovery_hint, /Never buy again/);
+});
+
+test('2.2.1 require:["p0f"] is checked against the plan p0f count before any charge, and want_p0f is its alias', async () => {
+    const base = {tariff_id: ids.tariff, quantity: 2, funding_source: 'account_credit', expected_total_usd: 258, confirm: true};
+    const refused = error(await call('buy_modems_with_balance', {...base, require: ['p0f'], idempotency_key: randomUUID()}), 'p0f_unavailable');
+    assert.deepEqual(refused.details, {p0f_available: 0, requested: 2});
+    error(await call('quote_purchase', {tariff_id: ids.tariff, quantity: 2, require: ['p0f']}), 'p0f_unavailable');
+    assert(!requests.some(request => request.path.startsWith('/payment/')));
+    overrides.set('GET /tariffs/available', p0fTariffs(3));
+    const quote = data(await call('quote_purchase', {tariff_id: ids.tariff, quantity: 2, require: ['p0f']}));
+    assert.deepEqual(quote.require, ['p0f']);
+    assert.equal(quote.plan.p0f_available, 3);
+    assert.match(quote.next_step, /require:\["p0f"\]/);
+    data(await call('buy_modems_with_balance', {...base, require: ['p0f'], idempotency_key: randomUUID()}));
+    assert.deepEqual(last('/payment/buy-with-account-credit').body.require, ['p0f']);
+    data(await call('buy_modems_with_balance', {...base, want_p0f: true, idempotency_key: randomUUID()}));
+    const alias = last('/payment/buy-with-account-credit').body;
+    assert.deepEqual(alias.require, ['p0f']);
+    assert.equal(alias.wantP0f, undefined);
+    error(await call('buy_modems_with_balance', {...base, require: ['ipv6'], idempotency_key: randomUUID()}));
+});
+
+test('2.2.1 plan names lose trailing tabs and spaces in quote and list output', async () => {
+    overrides.set('GET /tariffs/available', p0fTariffs(0));
+    const quote = data(await call('quote_purchase', {tariff_id: ids.tariff, quantity: 1}));
+    assert.equal(quote.plan.name, '"T-Mobile" Carrier | 30-Day Plan');
+    const listed = data(await call('list_tariffs', {}));
+    assert.equal(listed.tariffs[0].name, '"T-Mobile" Carrier | 30-Day Plan');
+});
+
+test('2.2.1 the agent guide no longer says receipts carry no payment ID', async () => {
+    const client = await connect();
+    const guide = (await client.readResource({uri: 'coronium://guide'})).contents[0].text;
+    assert.doesNotMatch(guide, /carry no payment ID/);
+    assert.match(guide, /Purchase receipts carry payment_id/);
+    assert.match(guide, /max_total_usd/);
+});
+
 // Runs last: every request any tool made in this file maps to a fixture route.
 test('every request sent during the suite matches a route in the public fixture', () => {
     const synthetic = new Set(['/payment/failure', '/payment/timeout', '/payment/html', '/modems/anything/restart']);
@@ -907,3 +995,4 @@ test('every request sent during the suite matches a route in the public fixture'
         && !patterns.some(route => route.method === request.method && route.pattern.test(request.path)));
     assert.deepEqual(unmatched.map(request => `${request.method} ${request.path}`), []);
 });
+

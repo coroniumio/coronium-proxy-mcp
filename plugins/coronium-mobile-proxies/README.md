@@ -42,7 +42,7 @@ Rotation waits for the carrier to hand out a new IP, which can take a minute or 
 
 ## What it runs
 
-The plugin declares one local MCP server. Claude Code starts it with `npx -y coronium-proxy-mcp@2.2.0`, which downloads that exact, pinned version from the npm registry and runs it on your computer over stdio. Source code: https://github.com/coroniumio/coronium-proxy-mcp.
+The plugin declares one local MCP server. Claude Code starts it with `npx -y coronium-proxy-mcp@2.2.1`, which downloads that exact, pinned version from the npm registry and runs it on your computer over stdio. Source code: https://github.com/coroniumio/coronium-proxy-mcp.
 
 The server runs in its `directory` profile. In this profile it has no tools that buy, renew, top up, cancel or refund, and no login tool. No tool asks for your Coronium account password or API token in the chat; the token comes only from the plugin setting.
 

@@ -28,7 +28,8 @@ const NO_SPENDING_GUIDE = `This server cannot buy, renew, top up, cancel or refu
 
 const BUY_GUIDE: readonly string[] = [
     "Buying a dedicated proxy: list_tariffs or list_free_modems, then quote_purchase for the exact total, then get_balance. Show the user the plan, quantity, funding source and total, and get a clear yes for that exact amount. Then buy with confirm:true, funding_source, expected_total_usd (the quoted total) and one new UUID idempotency_key. Never spend without that yes.",
-    "Purchase receipts carry no payment ID. On HTTP 202 or an unclear result, poll get_payment_status if you have an ID, and get_proxies; never buy again, change the key, split amounts or switch funding to get around a refusal. outcome refunded_not_charged means nothing was charged and the amount is back on the balance.",
+    "Purchase receipts carry payment_id. On HTTP 202 (pending) or error payment_delivery_unconfirmed, poll get_payment_status with that payment_id and check get_proxies; activation usually takes a few minutes. Never buy again, change the key, split amounts or switch funding to get around a refusal. Without a payment_id, reconcile with get_proxies and get_payments. outcome refunded_not_charged means nothing was charged and the amount is back on the balance.",
+    "The approved total also goes to the server as max_total_usd. A price_changed error means nothing was charged: quote again, show the new total, and only after a new yes buy with a new idempotency_key. For p0f units pass require:[\"p0f\"] to both quote_purchase and the buy.",
 ];
 
 const FULL_SPENDING_GUIDE: readonly string[] = [

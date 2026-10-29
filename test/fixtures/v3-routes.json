@@ -843,6 +843,16 @@
           "name": "basket",
           "type": "object",
           "required": false
+        },
+        {
+          "name": "max_total_usd",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "require",
+          "type": "array",
+          "required": false
         }
       ],
       "responses": [
@@ -969,6 +979,11 @@
           "name": "basket",
           "type": "object",
           "required": false
+        },
+        {
+          "name": "max_total_usd",
+          "type": "number",
+          "required": false
         }
       ],
       "responses": [
@@ -1078,6 +1093,16 @@
           "name": "basket",
           "type": "object",
           "required": false
+        },
+        {
+          "name": "max_total_usd",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "require",
+          "type": "array",
+          "required": false
         }
       ],
       "responses": [
@@ -1176,6 +1201,11 @@
         {
           "name": "tariff_id",
           "type": "object_id",
+          "required": false
+        },
+        {
+          "name": "max_total_usd",
+          "type": "number",
           "required": false
         }
       ],
@@ -1296,6 +1326,16 @@
           "name": "basket",
           "type": "object",
           "required": false
+        },
+        {
+          "name": "max_total_usd",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "require",
+          "type": "array",
+          "required": false
         }
       ],
       "responses": [
@@ -1303,11 +1343,30 @@
           "status": 200,
           "fields": [
             "result",
+            "paymentId",
             "charged_usd",
             "currency",
             "data",
             "billing",
             "webhook"
+          ]
+        },
+        {
+          "status": 202,
+          "fields": [
+            "message",
+            "paymentId",
+            "charged_usd",
+            "currency"
+          ]
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error",
+            "code",
+            "paymentId",
+            "charged_usd"
           ]
         },
         {
@@ -1412,6 +1471,11 @@
           "name": "coupon",
           "type": "string|object",
           "required": false
+        },
+        {
+          "name": "max_total_usd",
+          "type": "number",
+          "required": false
         }
       ],
       "responses": [
@@ -1419,11 +1483,30 @@
           "status": 200,
           "fields": [
             "result",
+            "paymentId",
             "charged_usd",
             "currency",
             "data",
             "billing",
             "webhook"
+          ]
+        },
+        {
+          "status": 202,
+          "fields": [
+            "message",
+            "paymentId",
+            "charged_usd",
+            "currency"
+          ]
+        },
+        {
+          "status": 503,
+          "fields": [
+            "error",
+            "code",
+            "paymentId",
+            "charged_usd"
           ]
         },
         {

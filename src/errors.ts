@@ -11,6 +11,8 @@ export interface ErrorDetails {
     request_id?: string;
     retry_after_seconds?: number;
     idempotency_key?: string;
+    // The backend's payment ID when it has one: poll it, never pay again.
+    payment_id?: string;
     outcome?: Outcome;
     details?: unknown;
 }

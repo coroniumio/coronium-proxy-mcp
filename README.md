@@ -1,6 +1,6 @@
 # Coronium proxy MCP
 
-A local **stdio MCP server** for customers of Coronium.io dedicated 4G/5G mobile proxies. Version 2.2.0. It lets an AI agent check balances, list owned proxies with ready-to-use HTTP and SOCKS5 URLs, test and rotate proxies, replace a proxy, download an OpenVPN profile, compare plans and live stock by country and carrier, quote a purchase or a renewal, and work with support tickets. If you turn spending on, it can also buy from your account balance, after you approve the exact total.
+A local **stdio MCP server** for customers of Coronium.io dedicated 4G/5G mobile proxies. Version 2.2.1. It lets an AI agent check balances, list owned proxies with ready-to-use HTTP and SOCKS5 URLs, test and rotate proxies, replace a proxy, download an OpenVPN profile, compare plans and live stock by country and carrier, quote a purchase or a renewal, and work with support tickets. If you turn spending on, it can also buy from your account balance, after you approve the exact total.
 
 It talks only to the Coronium customer API at `https://api.coronium.io/api/v3` (plus the public plan catalog on the same host). It has no admin, server or reseller-management tools. Upgrading from 1.3.0 or 2.0.0? Read the [migration notes](CHANGELOG.md).
 
@@ -13,7 +13,7 @@ Requires **Node.js 20 or newer**. Configure your MCP host to launch the pinned v
   "mcpServers": {
     "coronium": {
       "command": "npx",
-      "args": ["-y", "coronium-proxy-mcp@2.2.0"],
+      "args": ["-y", "coronium-proxy-mcp@2.2.1"],
       "env": {
         "CORONIUM_API_TOKEN": "YOUR_CORONIUM_API_TOKEN",
         "CORONIUM_TOOL_PROFILE": "directory"
@@ -34,7 +34,7 @@ If you want an agent to buy for you, use the `buyer` profile and turn spending o
   "mcpServers": {
     "coronium": {
       "command": "npx",
-      "args": ["-y", "coronium-proxy-mcp@2.2.0"],
+      "args": ["-y", "coronium-proxy-mcp@2.2.1"],
       "env": {
         "CORONIUM_API_TOKEN": "YOUR_CORONIUM_API_TOKEN",
         "CORONIUM_TOOL_PROFILE": "buyer",
@@ -54,7 +54,7 @@ Set the host's tool timeout above **180 seconds**: rotation, replacement and pay
 `CORONIUM_TOOL_PROFILE` decides which tools exist:
 
 - `directory` registers an explicit allowlist of 21 tools: balances (account credit, BTC and USDT), owned proxies with HTTP and SOCKS5 URLs, health, connectivity test, rotation and its status, replacement, OpenVPN profile, countries, plans and stock by country and carrier, renewal quotes, tickets (list, read, create, reply), webhook read, and capabilities. It has no login tool, no OS fingerprint tools, no wallet creation, and no buy, renew, top-up or cancel tools. `check_token` takes no token argument. This is the profile the Coronium Claude Code plugin uses.
-- `buyer` registers 13 tools for an agent that buys and runs a few dedicated proxies: plans, stock, `quote_purchase`, `buy_modems_with_balance` (only with spending on), payment status, owned proxies, test, rotate and rotation status, replace, balance, crypto balance and capabilities. No login tool and no token argument anywhere.
+- `buyer` registers 12 tools for an agent that buys and runs a few dedicated proxies, 13 with spending on (the extra one is `buy_modems_with_balance`): plans, stock, `quote_purchase`, `buy_modems_with_balance` (only with spending on), payment status, owned proxies, test, rotate and rotation status, replace, balance, crypto balance and capabilities. No login tool and no token argument anywhere.
 - `full` (the default when unset) registers every non-money tool, including settings, webhooks, pool keys and the Coronium Node tools. The login tool is not included unless `CORONIUM_ENABLE_LOGIN_TOOL=1`.
 - `read-only` registers only tools that change nothing. `CORONIUM_READ_ONLY=true` is an alias.
 
@@ -101,25 +101,28 @@ A `rotation_cooldown` error carries `retry_after_seconds`; wait that long. Anyon
 ### Funding, as it works today
 
 - A person adds account credit in the dashboard at dashboard.coronium.io (card or crypto). This MCP cannot add funds.
-- BTC: `get_crypto_balance` returns the account's BTC deposit address. Once a deposit confirms, buy or renew with `funding_source: "btc"`.
+- BTC: `get_crypto_balance` returns the account's BTC deposit address. Once a deposit confirms, buy or renew with `funding_source: "btc"`. It is marked as a write, not a read: the backend creates a missing deposit wallet on that call. For a pure balance read use `get_balance`.
+- The USDT balance is shown but is not a way to pay through this MCP.
 - Want to try the service first? Buy one paid 1-day plan.
 - Refunds go back to the account balance.
 
 ### Buying, step by step (spending enabled)
 
 1. `list_tariffs` or `list_free_modems` to see plans and live stock.
-2. `quote_purchase` with the plan and quantity. It checks stock and returns `total_usd`.
+2. `quote_purchase` with the plan and quantity. It checks stock and returns `total_usd`. For units with TCP fingerprint (p0f) control add `require: ["p0f"]`; the quote then also checks the plan's p0f count.
 3. `get_balance`, then show the person the plan, quantity, funding source and total. Wait for a clear yes for that exact amount.
-4. `buy_modems_with_balance` with `confirm: true`, `expected_total_usd` set to the quoted total and one new UUID `idempotency_key`.
-5. On HTTP 202 or an unclear result, poll `get_payment_status` (when you have a payment ID) and `get_proxies`. Never order again.
+4. `buy_modems_with_balance` with `confirm: true`, `expected_total_usd` set to the quoted total, the same `require` as the quote, and one new UUID `idempotency_key`.
+5. The receipt carries `payment_id`. On HTTP 202 (`pending: true`) or the error `payment_delivery_unconfirmed`, poll `get_payment_status` with that `payment_id` and check `get_proxies`. Activation usually takes a few minutes. Never order again.
 
 ### Money tools (spending enabled)
 
 - Every money tool needs `confirm:true`, a UUID `idempotency_key` per approved intent, and the approved amount. Buy and renew also need an explicit `funding_source` (`account_credit` or `btc`; no default).
-- `expected_total_usd`: the tool re-reads the live price (plan price and coupon, renewal quote, or pool plan price) right before sending and refuses with `price_changed` when the total differs from the approved one, higher or lower. This is a client-side check, not a server price lock.
+- `expected_total_usd`: the tool re-reads the live price (plan price and coupon, renewal quote, or pool plan price) right before sending and refuses with `price_changed` when the total differs from the approved one, higher or lower. Buy and renew also send it to the server as `max_total_usd`, so the server refuses (HTTP 409 `price_changed`, nothing charged, `details.quote` holds its current figure) when its total is higher. Neither is a price lock. After `price_changed`, quote again, ask again, and use a new `idempotency_key` for the newly approved total.
+- `idempotency_key` is sent as the `Idempotency-Key` header on every buy and renew.
 - `cancel_modem` needs `min_refund_usd`. It re-runs the refund preview and refuses with `refund_changed` when the refund is now lower.
 - A coupon that gives no discount is refused (`coupon_invalid`) instead of being charged at full price.
-- Purchase receipts have no payment ID. Reconcile with `get_payments` and `get_proxies`. `outcome:"unknown"` means check before acting; `outcome:"refunded_not_charged"` means nothing was charged.
+- `require: ["p0f"]` buys only units with p0f control and is refused before any charge (`p0f_unavailable`) when the plan has too few. `want_p0f: true` is a deprecated alias for it.
+- Buy and renew results carry `payment_id`, `pending` and `next_step`; an error with a known payment carries `payment_id` too. Poll `get_payment_status` with it. Without one, reconcile with `get_payments` and `get_proxies`. `outcome:"unknown"` means check before acting; `outcome:"refunded_not_charged"` means nothing was charged.
 - No write is ever retried automatically. A payment key is bound to one payload for the process lifetime and concurrent identical calls share one request.
 
 ## Results and errors

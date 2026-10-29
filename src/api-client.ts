@@ -221,7 +221,7 @@ export class CoroniumAPI {
         const hasErrorString = object && typeof object.error === "string" && object.error;
         if (hasErrorString && !options.diagnostic) throw successWithErrorBody(response, object, mutates, options);
         if (!options.receipt) return body;
-        return {response: body, request: {idempotency_key: options.idempotencyKey,
+        return {response: body, request: {idempotency_key: options.idempotencyKey, http_status: response.status,
             request_id: response.headers["x-request-id"] ?? null, replayed: response.headers["x-idempotency-replay"] === "true"}};
     }
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.1 - 2026-10-29
+
+Money-path fixes. The tool list and profile counts are unchanged (directory 21, buyer 12 or 13 with spending on, read-only 31, full 59 or 65 with spending on).
+
+### Changed
+
+- `coronium_buy_modems_with_balance` and `coronium_renew_modems_with_balance` send the approved `expected_total_usd` to the server as `max_total_usd`, so the server itself refuses a higher total (HTTP 409 `price_changed`, nothing charged). The client-side check before sending stays. The `idempotency_key` is sent as the `Idempotency-Key` header, as before.
+- A server `price_changed` refusal carries a recovery hint: nothing was charged, quote again, ask again, and use a new `idempotency_key` for the newly approved total. `details.quote` holds the server's current figure.
+- Buy and renew results now carry `payment_id`, `pending` (true on HTTP 202) and `next_step`, which tells the agent to poll `coronium_get_payment_status` with that ID and never buy again. A 503 `payment_delivery_unconfirmed` error carries `payment_id` and the same poll hint. Receipts also record `request.http_status`.
+- `require: ["p0f"]` is the way to ask for units with TCP fingerprint (p0f) control on a buy; `want_p0f: true` still works as a deprecated alias and is sent as `require: ["p0f"]`. `coronium_quote_purchase` accepts `require` too. Both refuse with `p0f_unavailable` before any charge when the plan's p0f count is below the quantity, and quote plans show `p0f_available`.
+- Plan names from the API lose leading and trailing whitespace (some end in tabs) in `coronium_quote_purchase` and `coronium_list_tariffs`.
+- The agent guide (`coronium://guide`) no longer says purchase receipts carry no payment ID.
+- README and llms.txt explain why `coronium_get_crypto_balance` is marked as a write (the backend can create a missing deposit wallet on that call) and that USDT is not a payment lane in this MCP.
+- The Claude Code plugin pins `coronium-proxy-mcp@2.2.1` (plugin 1.0.2). Its tool list is unchanged.
+
 ## 2.2.0 - 2026-10-29
 
 Hygiene release: token-only sign-in by default, a short `buyer` profile, a purchase quote tool, recovery hints on every error, and a stricter price check before any spend.

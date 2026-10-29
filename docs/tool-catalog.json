@@ -1,5 +1,5 @@
 {
-  "version": "2.2.0",
+  "version": "2.2.1",
   "tools": [
     {
       "name": "coronium_apply_modem_settings",
@@ -302,7 +302,7 @@
     {
       "name": "coronium_buy_modems_with_balance",
       "title": "Buy modems with balance",
-      "description": "SPENDS MONEY. Buy dedicated proxies from account credit or BTC. First call coronium_quote_purchase and coronium_get_balance, show the user the plan, quantity, funding source and total, and get an explicit yes. Pass that total as expected_total_usd: the tool re-reads the live price and refuses if it differs. Use one new idempotency_key per purchase and keep it with the whole receipt. On 202 or an unclear result, poll coronium_get_payment_status and coronium_get_proxies; never buy again.",
+      "description": "SPENDS MONEY. Buy dedicated proxies from account credit or BTC. First call coronium_quote_purchase and coronium_get_balance, show the user the plan, quantity, funding source and total, and get an explicit yes. Pass that total as expected_total_usd: the tool re-reads the live price and refuses if it differs, and sends it as max_total_usd so the server refuses (409 price_changed, nothing charged) a higher total too. Use one new idempotency_key per purchase; it goes out as the Idempotency-Key header. The receipt carries payment_id: on 202 (pending) or 503 payment_delivery_unconfirmed, poll coronium_get_payment_status with it and check coronium_get_proxies; never buy again. Activation usually takes a few minutes.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -351,8 +351,20 @@
             "minLength": 1,
             "maxLength": 128
           },
+          "require": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "p0f"
+              ]
+            },
+            "maxItems": 1,
+            "description": "Features every bought unit must have. [\"p0f\"] buys only units with TCP fingerprint (p0f) control; refused before any charge when the plan has too few of them."
+          },
           "want_p0f": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Deprecated alias: want_p0f:true is the same as require:[\"p0f\"]. Use require."
           },
           "confirm": {
             "type": "boolean",
@@ -2550,6 +2562,17 @@
             "type": "string",
             "pattern": "^[a-zA-Z]{2}$",
             "description": "Optional guard: refuse if this does not match the plan's country."
+          },
+          "require": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "p0f"
+              ]
+            },
+            "maxItems": 1,
+            "description": "Features every bought unit must have. [\"p0f\"] buys only units with TCP fingerprint (p0f) control; refused before any charge when the plan has too few of them."
           }
         },
         "required": [
@@ -2591,7 +2614,7 @@
     {
       "name": "coronium_renew_modems_with_balance",
       "title": "Renew modems with balance",
-      "description": "SPENDS MONEY. Renew owned proxies for the given days from account credit or BTC. Get a renewal quote, show the total and get an explicit yes, then pass that total as expected_total_usd: the tool re-quotes and refuses if the total differs. Sends modems:[{modem_id,days}] and never a purchase tariff. Preserve the idempotency key and receipt; reconcile after unclear results.",
+      "description": "SPENDS MONEY. Renew owned proxies for the given days from account credit or BTC. Get a renewal quote, show the total and get an explicit yes, then pass that total as expected_total_usd: the tool re-quotes and refuses if the total differs, and sends it as max_total_usd so the server refuses a higher total too. Sends modems:[{modem_id,days}] and never a purchase tariff. Preserve the idempotency key and receipt; on 202 or an unclear result poll coronium_get_payment_status with payment_id, never renew again.",
       "inputSchema": {
         "type": "object",
         "properties": {

@@ -1,4 +1,4 @@
-# API boundary (2.2.0; routes checked 2026-10-17)
+# API boundary (2.2.1; routes checked 2026-10-29)
 
 This package calls the public Coronium customer API only. The default base is `https://api.coronium.io/api/v3`. Plan, country and stock reads need no token; everything else uses `Authorization: Bearer <token>`. Pool plan discovery reads the public catalog at `/api/v1/tariffs` on the same host and keeps only pool plan fields.
 
@@ -11,7 +11,7 @@ The exact routes the tools call are listed in [`test/fixtures/v3-routes.json`](.
 - Rotation: `POST /modems/:modem_id/restart` answers `rotated:true`, `rotated:false` (same IP), or HTTP 202 with `pending:true` for rentals that rotate asynchronously. The public `GET /modems/rotate-modem-by-token/:token` answers `{result:"ok", new_ip}` on success. A 429 means the rotation cooldown; its code is not reliable, so the client classifies it by status and `Retry-After` or `retry_after_seconds`.
 - Replacement: `POST /modems/:modem_id/replace` issues a new proxy with new credentials and uses one of the daily replacements.
 - Cancellation: `POST /modems/:modem_id/cancel` with `dryRun:true` previews the refund without changing anything; without it the proxy is released immediately.
-- Purchases and renewals: `/payment/buy-with-account-credit`, `/payment/buy-modems-with-crypto-balance`, `/payment/renew-with-account-credit` and `/payment/renew-modems-with-crypto-balance`, each with an `Idempotency-Key` header. Buys send `tariff_id` and `modemCount`; renewals send `modems:[{modem_id, days}]`. Receipts carry no payment ID. An out-of-stock purchase can be refunded synchronously (HTTP 503 with `refunded:true`).
+- Purchases and renewals: `/payment/buy-with-account-credit`, `/payment/buy-modems-with-crypto-balance`, `/payment/renew-with-account-credit` and `/payment/renew-modems-with-crypto-balance`, each with an `Idempotency-Key` header. Buys send `tariff_id`, `modemCount`, `max_total_usd` and, for p0f units, `require:["p0f"]`; renewals send `modems:[{modem_id, days}]` and `max_total_usd`. The server refuses a total above `max_total_usd` with HTTP 409 `price_changed` before any debit. Receipts carry `paymentId` (HTTP 200, 202 pending, and 503 `PAYMENT_DELIVERY_UNCONFIRMED`); poll `GET /payments/:id/status` with it. An out-of-stock purchase can be refunded synchronously (HTTP 503 with `refunded:true`).
 - Webhooks: `GET`, `PUT` and `DELETE /account/webhook`, `POST /account/webhook/secret/rotate` and `POST /account/webhook/test`. A webhook URL turns on automatic replacement of dead proxies.
 - Tickets: `/tickets` list, create, read, reply and archive. The client removes support-internal fields from results.
 
