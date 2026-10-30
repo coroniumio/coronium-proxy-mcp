@@ -12,6 +12,7 @@ Hosted server. The stdio server, its tool list and profile counts are unchanged.
 - One JSON log line per request with method, tool and argument names only.
 - `scripts/oauth-flow-integration.mjs` (`npm run test:oauth-flow`) walks the whole sign-in and tool flow against a local or staging stack. It never calls a tool that spends or changes a proxy.
 - Claude Code plugin 1.1.0 declares the hosted server as `coronium-remote` next to the local `coronium` server, so the plugin works in claude.ai and Cowork too.
+- `server.json` lists the hosted server under `remotes` (Streamable HTTP, `https://api.coronium.io/mcp`) for the MCP Registry.
 
 ### Changed
 
