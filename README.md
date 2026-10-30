@@ -72,12 +72,12 @@ Run your own copy over HTTP with `npx -y -p coronium-proxy-mcp@2.3.0 coronium-pr
 
 [![coroniumio/coronium-proxy-mcp MCP server](https://glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp/badges/score.svg)](https://glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp)
 
-- **Claude Code plugin** (directory profile, no money tools; asks for the token in a secure dialog):
+- **Claude Code plugin** (hosted directory server, no money tools; sign in with your Coronium account in the browser, no token):
   ```
   /plugin marketplace add coroniumio/coronium-proxy-mcp
   /plugin install coronium-mobile-proxies@coronium
   ```
-  Details: [plugins/coronium-mobile-proxies](plugins/coronium-mobile-proxies#readme).
+  Then run `/mcp`, select `plugin:coronium-mobile-proxies:coronium` and choose Authenticate. Details: [plugins/coronium-mobile-proxies](plugins/coronium-mobile-proxies#readme).
 - **Official MCP Registry**: `io.github.coroniumio/coronium-proxy-mcp` ([registry entry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.coroniumio/coronium-proxy-mcp)). Hosts that read the registry install the npm package `coronium-proxy-mcp`.
 - **npm**: `npx -y coronium-proxy-mcp@2.3.0` with the environment shown under [Connect](#connect).
 - **Glama**: [glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp](https://glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp).

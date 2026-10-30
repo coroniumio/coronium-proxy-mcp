@@ -46,51 +46,33 @@ function assertFlagged(problems, fragment) {
 
 const mcpJson = join(pluginPath, '.mcp.json');
 const readme = join(pluginPath, 'README.md');
-const serverEnv = value => value.mcpServers.coronium.env;
+const manifest = join(pluginPath, '.claude-plugin', 'plugin.json');
 
 test('the committed plugin passes every check', () => {
     assert.deepEqual(checkPlugins(repoDir), []);
 });
 
-test('the plugin runs the directory profile against the fixed production host with the token from userConfig', () => {
+test('the plugin connects only to the hosted directory server and signs in with OAuth', () => {
     const config = JSON.parse(readFileSync(join(repoDir, mcpJson), 'utf8'));
-    const server = config.mcpServers.coronium;
-    assert.equal(server.command, 'npx');
-    assert.match(server.args.find(arg => arg.startsWith('coronium-proxy-mcp')), /^coronium-proxy-mcp@\d+\.\d+\.\d+$/);
-    assert.deepEqual(server.env, {
-        CORONIUM_API_TOKEN: '${user_config.api_token}',
-        CORONIUM_TOOL_PROFILE: 'directory',
-        CORONIUM_BASE_URL: 'https://api.coronium.io/api/v3',
-        CORONIUM_AUTO_LOGIN: '0',
-    });
+    assert.deepEqual(config.mcpServers, {coronium: {type: 'http', url: 'https://api.coronium.io/mcp'}});
+    const plugin = JSON.parse(readFileSync(join(repoDir, manifest), 'utf8'));
+    assert.equal('userConfig' in plugin, false);
 });
 
-test('an unpinned or ranged npx launcher is refused', () => {
-    for (const arg of ['coronium-proxy-mcp', 'coronium-proxy-mcp@latest', 'coronium-proxy-mcp@^2.1.0']) {
-        const problems = problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers.coronium.args = ['-y', arg]; }));
-        assertFlagged(problems, 'exact x.y.z');
-    }
+test('a token setting in the manifest is refused, since it replaces the browser sign-in', () => {
+    const problems = problemsAfter(dir => editJson(dir, manifest, value => {
+        value.userConfig = {api_token: {type: 'string', title: 'Token', sensitive: true, required: true}};
+    }));
+    assertFlagged(problems, 'must not declare userConfig');
 });
 
-test('a pin older than the source version is refused', () => {
-    const problems = problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers.coronium.args = ['-y', 'coronium-proxy-mcp@1.3.0']; }));
-    assertFlagged(problems, 'older than package.json');
-});
-
-test('switching to the full profile or opting into spending is refused', () => {
-    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { serverEnv(value).CORONIUM_TOOL_PROFILE = 'full'; })), 'must be directory');
-    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { serverEnv(value).CORONIUM_ENABLE_SPENDING = '1'; })), 'would enable spending');
-});
-
-test('a shell credential passthrough or unfixed base URL is refused', () => {
-    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { serverEnv(value).CORONIUM_API_TOKEN = '${CORONIUM_API_TOKEN}'; })), 'reads a value from the user');
-    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { delete serverEnv(value).CORONIUM_BASE_URL; })), 'CORONIUM_BASE_URL');
-    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { serverEnv(value).CORONIUM_PASSWORD = 'x'; })), 'must not be set');
-});
-
-test('the token setting must stay sensitive and required', () => {
-    const manifest = join(pluginPath, '.claude-plugin', 'plugin.json');
-    assertFlagged(problemsAfter(dir => editJson(dir, manifest, value => { value.userConfig.api_token.sensitive = false; })), 'sensitive');
+test('a local stdio server or a second server is refused', () => {
+    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => {
+        value.mcpServers.coronium = {command: 'npx', args: ['-y', 'coronium-proxy-mcp@2.3.0']};
+    })), 'type http');
+    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => {
+        value.mcpServers['coronium-buyer'] = {type: 'http', url: 'https://api.coronium.io/mcp/buyer'};
+    })), 'expected only the hosted coronium server');
 });
 
 test('spending and credential tools may not appear in plugin text', () => {
@@ -133,10 +115,8 @@ test('forbidden files and a second marketplace plugin are refused', () => {
 });
 
 test('the hosted server entry is the directory URL over http, with no headers or user values', () => {
-    const config = JSON.parse(readFileSync(join(repoDir, mcpJson), 'utf8'));
-    assert.deepEqual(config.mcpServers['coronium-remote'], {type: 'http', url: 'https://api.coronium.io/mcp'});
-    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers['coronium-remote'].url = 'https://api.coronium.io/mcp/buyer'; })), 'must point at exactly');
-    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers['coronium-remote'].headers = {Authorization: 'Bearer ${user_config.api_token}'}; })), 'must not set headers');
-    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers['coronium-remote'].type = 'sse'; })), 'type http');
-    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers['coronium-buyer'] = {type: 'http', url: 'https://api.coronium.io/mcp/buyer'}; })), 'optionally coronium-remote');
+    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers.coronium.url = 'https://api.coronium.io/mcp/buyer'; })), 'must point at exactly');
+    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers.coronium.headers = {Authorization: 'Bearer x'}; })), 'must not set headers');
+    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers.coronium.type = 'sse'; })), 'type http');
+    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers.coronium.env = {CORONIUM_ENABLE_SPENDING: '1'}; })), 'must not set env');
 });

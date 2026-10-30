@@ -1,8 +1,8 @@
 {
   "name": "coronium-mobile-proxies",
   "displayName": "Coronium Mobile Proxies",
-  "version": "1.1.0",
-  "description": "Check the health of the dedicated 4G/5G mobile proxies you rent from Coronium.io, rotate their IP, get connection details, compare plans and renewal quotes, and open support tickets. Works in Claude Code with a local server, and in claude.ai and Cowork through the hosted Coronium connector with your Coronium sign-in. The plugin runs the server's directory profile, which has no money tools, so it does not spend. Spending is off by default in the server too; its separate buyer profile with CORONIUM_ENABLE_SPENDING=1 can buy from your balance after you confirm the exact total.",
+  "version": "1.2.0",
+  "description": "Check the health of the dedicated 4G/5G mobile proxies you rent from Coronium.io, rotate their IP, get connection details, compare plans and renewal quotes, and open support tickets. Sign in with your Coronium account in the browser - no token to copy. The plugin connects to the hosted Coronium server's directory profile, which has no money tools, so it never spends.",
   "author": {
     "name": "Coronium",
     "email": "hello@coronium.io",
@@ -11,19 +11,17 @@
   "homepage": "https://github.com/coroniumio/coronium-proxy-mcp/tree/main/plugins/coronium-mobile-proxies#readme",
   "repository": "https://github.com/coroniumio/coronium-proxy-mcp",
   "license": "MIT",
-  "keywords": ["mobile-proxy", "4g", "5g", "ip-rotation", "qa", "geo-testing"],
+  "keywords": [
+    "mobile-proxy",
+    "4g",
+    "5g",
+    "ip-rotation",
+    "qa",
+    "geo-testing"
+  ],
   "icon": "./assets/logo.png",
   "privacyPolicyUrl": "https://www.coronium.io/privacy-policy",
   "termsOfServiceUrl": "https://www.coronium.io/terms-and-conditions",
   "supportUrl": "mailto:hello@coronium.io",
-  "documentationUrl": "https://github.com/coroniumio/coronium-proxy-mcp/tree/main/plugins/coronium-mobile-proxies#readme",
-  "userConfig": {
-    "api_token": {
-      "type": "string",
-      "title": "Coronium API token",
-      "description": "The dashboard API token from dashboard.coronium.io, Account -> API Access. Claude Code keeps it in your system's secure credential store.",
-      "required": true,
-      "sensitive": true
-    }
-  }
+  "documentationUrl": "https://github.com/coroniumio/coronium-proxy-mcp/tree/main/plugins/coronium-mobile-proxies#readme"
 }

@@ -12,7 +12,7 @@
     {
       "name": "coronium-mobile-proxies",
       "source": "./plugins/coronium-mobile-proxies",
-      "description": "Check, rotate and connect the dedicated 4G/5G mobile proxies you rent from Coronium.io. This plugin does not spend: spending is off by default, and buying needs the server's buyer profile with CORONIUM_ENABLE_SPENDING=1 and an exact-total confirmation."
+      "description": "Check, rotate and connect the dedicated 4G/5G mobile proxies you rent from Coronium.io. Sign in with your Coronium account in the browser. This plugin never spends."
     }
   ]
 }

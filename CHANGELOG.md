@@ -1,5 +1,12 @@
 # Changelog
 
+## Plugin 1.2.0 - 2026-10-30
+
+### Changed
+
+- The Claude Code plugin now connects only to the hosted server `coronium` at `https://api.coronium.io/mcp` and signs in with your Coronium account in the browser (OAuth). It no longer asks for an API token at install and no longer starts a local `npx` server. Run `/mcp`, select the server and choose Authenticate.
+- To keep using an API token, run the npm package yourself as shown under Connect.
+
 ## 2.3.0 - 2026-10-30
 
 Hosted server. The stdio server, its tool list and profile counts are unchanged.

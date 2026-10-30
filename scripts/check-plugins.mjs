@@ -8,12 +8,10 @@ import {join, relative, basename, dirname} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 
 const PLUGIN_NAME = "coronium-mobile-proxies";
-const API_HOST = "https://api.coronium.io/api/v3";
 // The hosted server the plugin may point at. It must be the directory resource, which
 // never registers money tools, and the exact URL submitted to the connector directory
 // (Claude Code dedupes plugin servers and claude.ai connectors by URL).
-const STDIO_SERVER_NAME = "coronium";
-const REMOTE_SERVER_NAME = "coronium-remote";
+const REMOTE_SERVER_NAME = "coronium";
 const REMOTE_URL = "https://api.coronium.io/mcp";
 
 // The directory scan blocks or holds on these files anywhere in the plugin folder.
@@ -121,26 +119,10 @@ function checkManifest(pluginDir) {
     const problems = [];
     const manifest = JSON.parse(readFileSync(join(pluginDir, ".claude-plugin", "plugin.json"), "utf8"));
     if (manifest.name !== PLUGIN_NAME) problems.push(`plugin.json: name must stay ${PLUGIN_NAME}`);
-    const token = manifest.userConfig?.api_token;
-    if (!token) return [...problems, "plugin.json: userConfig.api_token is missing"];
-    if (token.sensitive !== true) problems.push("plugin.json: api_token must be sensitive");
-    if (token.required !== true) problems.push("plugin.json: api_token must be required");
-    if ("default" in token) problems.push("plugin.json: api_token must not have a default");
+    // Sign-in is the browser OAuth flow of the hosted server; the plugin must not ask for a token.
+    if ("userConfig" in manifest) problems.push("plugin.json: must not declare userConfig, sign-in is OAuth only");
     if (manifest.icon && !existsSync(join(pluginDir, manifest.icon))) problems.push("plugin.json: icon file is missing");
     return problems;
-}
-
-function parseExactPin(arg) {
-    const match = /^coronium-proxy-mcp@(\d+)\.(\d+)\.(\d+)$/.exec(arg ?? "");
-    if (!match) return null;
-    return match.slice(1).map(Number);
-}
-
-function compareVersions(left, right) {
-    for (let index = 0; index < 3; index += 1) {
-        if (left[index] !== right[index]) return left[index] - right[index];
-    }
-    return 0;
 }
 
 function checkRemoteServer(server) {
@@ -157,35 +139,13 @@ function checkRemoteServer(server) {
     return problems;
 }
 
-function checkServerConfig(pluginDir, packageVersion) {
-    const problems = [];
+function checkServerConfig(pluginDir) {
     const servers = JSON.parse(readFileSync(join(pluginDir, ".mcp.json"), "utf8")).mcpServers ?? {};
     const names = Object.keys(servers);
-    const allowed = [STDIO_SERVER_NAME, REMOTE_SERVER_NAME];
-    const unexpected = names.filter(name => !allowed.includes(name));
-    if (!names.includes(STDIO_SERVER_NAME) || unexpected.length) {
-        return [`.mcp.json: expected the ${STDIO_SERVER_NAME} server and optionally ${REMOTE_SERVER_NAME}, found ${names.join(", ") || "none"}`];
+    if (names.length !== 1 || names[0] !== REMOTE_SERVER_NAME) {
+        return [`.mcp.json: expected only the hosted ${REMOTE_SERVER_NAME} server, found ${names.join(", ") || "none"}`];
     }
-    if (names.includes(REMOTE_SERVER_NAME)) problems.push(...checkRemoteServer(servers[REMOTE_SERVER_NAME]));
-    const server = servers[STDIO_SERVER_NAME];
-    const environment = server.env ?? {};
-    if (server.command !== "npx") problems.push(".mcp.json: the server must start with npx");
-    const pinArg = (server.args ?? []).find(arg => arg.startsWith("coronium-proxy-mcp"));
-    const pin = parseExactPin(pinArg);
-    if (!pin) problems.push(`.mcp.json: ${pinArg ?? "the package"} must be pinned to an exact x.y.z version`);
-    // The pin may lead the source version while a release is in flight, but never trail it.
-    const sourceVersion = packageVersion.split(".").map(Number);
-    if (pin && compareVersions(pin, sourceVersion) < 0) problems.push(`.mcp.json: pin is older than package.json ${packageVersion}`);
-    if (environment.CORONIUM_API_TOKEN !== "${user_config.api_token}") problems.push(".mcp.json: the token must come only from ${user_config.api_token}");
-    if (environment.CORONIUM_TOOL_PROFILE !== "directory") problems.push(".mcp.json: CORONIUM_TOOL_PROFILE must be directory");
-    if (environment.CORONIUM_BASE_URL !== API_HOST) problems.push(`.mcp.json: CORONIUM_BASE_URL must be fixed to ${API_HOST}`);
-    if (environment.CORONIUM_AUTO_LOGIN !== "0") problems.push(".mcp.json: CORONIUM_AUTO_LOGIN must be 0");
-    for (const [key, value] of Object.entries(environment)) {
-        if (/^\$\{(?!user_config\.)[^}]+\}$/.test(String(value))) problems.push(`.mcp.json: ${key} reads a value from the user's shell`);
-        if (/SPEND|MONEY|PAYMENT/i.test(key) && !["0", "false", ""].includes(String(value).toLowerCase())) problems.push(`.mcp.json: ${key} would enable spending`);
-        if (/PASSWORD|LOGIN$|EMAIL/i.test(key) && key !== "CORONIUM_AUTO_LOGIN") problems.push(`.mcp.json: ${key} must not be set`);
-    }
-    return problems;
+    return checkRemoteServer(servers[REMOTE_SERVER_NAME]);
 }
 
 function checkReadme(pluginDir) {
@@ -233,13 +193,12 @@ function checkMarketplace(repoDir) {
 
 export function checkPlugins(repoDir) {
     const pluginDir = join(repoDir, "plugins", PLUGIN_NAME);
-    const packageVersion = JSON.parse(readFileSync(join(repoDir, "package.json"), "utf8")).version;
     const files = listFiles(pluginDir);
     return [
         ...checkFileTree(pluginDir, files),
         ...checkTextContent(pluginDir, files),
         ...checkManifest(pluginDir),
-        ...checkServerConfig(pluginDir, packageVersion),
+        ...checkServerConfig(pluginDir),
         ...checkReadme(pluginDir),
         ...checkSkills(pluginDir, registeredToolNames(repoDir)),
         ...checkMarketplace(repoDir),
