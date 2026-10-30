@@ -2,7 +2,9 @@
 
 Manage the dedicated mobile proxies you rent from [Coronium.io](https://www.coronium.io) without leaving Claude Code. Each Coronium proxy runs on a real 4G/5G SIM device on a mobile carrier network. With this plugin, Claude can list your proxies, check their health, run a connectivity test, rotate the IP, show connection details for your tools, compare plans and renewal quotes, and open or follow support tickets.
 
-This version cannot make purchases. Buying, renewing, topping up and cancelling happen in the dashboard at https://dashboard.coronium.io.
+This plugin cannot make purchases. Buying, renewing, topping up and cancelling happen in the dashboard at https://dashboard.coronium.io.
+
+Spending is off by default in the Coronium MCP server as well. If you want an agent to buy, run the server yourself (outside this plugin) with `CORONIUM_TOOL_PROFILE=buyer` and `CORONIUM_ENABLE_SPENDING=1`. In that profile a purchase needs the exact expected total, an explicit confirmation and an idempotency key, and the server enforces a maximum total. See the [server README](https://github.com/coroniumio/coronium-proxy-mcp#connect).
 
 ## Requirements
 
