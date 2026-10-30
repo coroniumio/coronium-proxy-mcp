@@ -49,6 +49,20 @@ Leave `CORONIUM_ENABLE_SPENDING` out and the same profile can look, quote and ma
 
 Set the host's tool timeout above **180 seconds**: rotation, replacement and payment calls wait for the backend. If a call times out, check its outcome before acting again. The process uses stdout only for MCP JSON-RPC.
 
+## Install from a listing
+
+[![coroniumio/coronium-proxy-mcp MCP server](https://glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp/badges/score.svg)](https://glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp)
+
+- **Claude Code plugin** (directory profile, no money tools; asks for the token in a secure dialog):
+  ```
+  /plugin marketplace add coroniumio/coronium-proxy-mcp
+  /plugin install coronium-mobile-proxies@coronium
+  ```
+  Details: [plugins/coronium-mobile-proxies](plugins/coronium-mobile-proxies#readme).
+- **Official MCP Registry**: `io.github.coroniumio/coronium-proxy-mcp` ([registry entry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.coroniumio/coronium-proxy-mcp)). Hosts that read the registry install the npm package `coronium-proxy-mcp`.
+- **npm**: `npx -y coronium-proxy-mcp@2.2.1` with the environment shown under [Connect](#connect).
+- **Glama**: [glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp](https://glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp).
+
 ## Tool profiles
 
 `CORONIUM_TOOL_PROFILE` decides which tools exist:

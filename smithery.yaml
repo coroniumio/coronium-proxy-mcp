@@ -1,0 +1,38 @@
+# Smithery configuration for the Coronium proxy MCP server.
+# Local stdio server, launched with npx at a pinned version.
+# Spending is not exposed here: CORONIUM_ENABLE_SPENDING is never set,
+# so no profile chosen below can buy, renew, top up or cancel.
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - coroniumApiToken
+    properties:
+      coroniumApiToken:
+        type: string
+        title: Coronium API token
+        description: Dashboard API token from dashboard.coronium.io, Account, API Access.
+      coroniumToolProfile:
+        type: string
+        title: Tool profile
+        description: "directory (21 tools, the default), read-only (tools that change nothing), buyer (12 tools, look, quote and manage) or full (every non-money tool). Spending stays off in every profile here."
+        enum:
+          - directory
+          - read-only
+          - buyer
+          - full
+        default: directory
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', 'coronium-proxy-mcp@2.2.1'],
+      env: {
+        CORONIUM_API_TOKEN: config.coroniumApiToken,
+        CORONIUM_TOOL_PROFILE: config.coroniumToolProfile || 'directory',
+        CORONIUM_BASE_URL: 'https://api.coronium.io/api/v3'
+      }
+    })
+  exampleConfig:
+    coroniumApiToken: YOUR_CORONIUM_API_TOKEN
+    coroniumToolProfile: directory
