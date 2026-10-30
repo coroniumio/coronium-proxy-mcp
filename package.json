@@ -1,13 +1,14 @@
 {
   "name": "coronium-proxy-mcp",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "mcpName": "io.github.coroniumio/coronium-proxy-mcp",
   "description": "Model Context Protocol server for Coronium.io dedicated 4G/5G mobile proxies: list, test, rotate and replace proxies, compare plans and stock, check balances and open support tickets.",
   "private": false,
   "type": "module",
   "main": "dist/server.js",
   "bin": {
-    "coronium-proxy-mcp": "dist/server.js"
+    "coronium-proxy-mcp": "dist/server.js",
+    "coronium-proxy-mcp-http": "dist/http.js"
   },
   "scripts": {
     "build": "npm run clean && tsc -p .",
@@ -23,7 +24,9 @@
     "docs:generate": "node scripts/tool-catalog.mjs",
     "docs:check": "node scripts/tool-catalog.mjs --check",
     "test:public": "node scripts/public-smoke.mjs",
-    "check:plugins": "node scripts/check-plugins.mjs"
+    "check:plugins": "node scripts/check-plugins.mjs",
+    "start:http": "node dist/http.js",
+    "test:oauth-flow": "node scripts/oauth-flow-integration.mjs"
   },
   "keywords": [
     "mcp",

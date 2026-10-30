@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.3.0 - 2026-10-30
+
+Hosted server. The stdio server, its tool list and profile counts are unchanged.
+
+### Added
+
+- `coronium-proxy-mcp-http`: the same tools over Streamable HTTP (stateless), for the hosted server at `https://api.coronium.io/mcp` (claude.ai, the Claude apps, Cowork and Claude Code). Each request is checked with the Coronium API and runs with that caller's own sign-in, profile and permissions; nothing is shared between requests.
+- `/mcp` runs the `directory` profile and never registers money tools. `/mcp/buyer` runs the `buyer` profile; its buy tool is registered only when the token holds `spend` and the user turned purchases on for that connection. A money call without `spend` answers 403 `insufficient_scope` (step-up). Purchases keep the exact-total confirmation, idempotency key and server-side maximum.
+- OAuth discovery: HTTP 401 with `WWW-Authenticate: Bearer resource_metadata=...`, RFC 9728 protected resource metadata for both addresses, audience check (a token works only on the address it was issued for), Origin and Host checks, and no tokens in URLs.
+- One JSON log line per request with method, tool and argument names only.
+- `scripts/oauth-flow-integration.mjs` (`npm run test:oauth-flow`) walks the whole sign-in and tool flow against a local or staging stack. It never calls a tool that spends or changes a proxy.
+- Claude Code plugin 1.1.0 declares the hosted server as `coronium-remote` next to the local `coronium` server, so the plugin works in claude.ai and Cowork too.
+
+### Changed
+
+- In hosted mode, `coronium_get_capabilities` reports `transport: streamable-http`, the auth type and the granted scopes. Payment intent coalescing is keyed on the connection and expires after 24 hours instead of a process-wide cap.
+
 ## 2.2.1 - 2026-10-29
 
 Money-path fixes. The tool list and profile counts are unchanged (directory 21, buyer 12 or 13 with spending on, read-only 31, full 59 or 65 with spending on).

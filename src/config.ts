@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import {readFileSync} from "node:fs";
+import {currentContext} from "./context.js";
 import {profileFromEnvironment, type ToolProfile} from "./profiles.js";
 
 // Settings that turn on spending or redirect the bearer token must come from the
@@ -71,7 +72,7 @@ export interface Config {
 
 const profile: ToolProfile = profileFromEnvironment(process.env);
 
-export const config: Config = {
+const baseConfig: Config = {
     baseUrl: apiBase,
     // Existing public catalog, used only to discover pool tariffs. No credentials are sent.
     catalogUrl: new URL("/api/v1/tariffs", apiBase).href,
@@ -90,3 +91,38 @@ export const config: Config = {
     timeoutMs: 30_000,
     actionTimeoutMs: 180_000,
 };
+
+// Inside a hosted (Streamable HTTP) request the per-connection settings win over the
+// process environment, so one user's profile or spending switch can never reach another
+// request. Outside a request context (stdio, tests) the values behave as plain fields.
+function contextual<K extends keyof Config>(key: K, fromContext: () => Config[K] | undefined): PropertyDescriptor {
+    return {
+        enumerable: true,
+        get: () => {
+            const value = fromContext();
+            return value === undefined ? baseConfig[key] : value;
+        },
+        set: (value: Config[K]) => { baseConfig[key] = value; },
+    };
+}
+
+export const config: Config = Object.defineProperties({} as Config, {
+    ...Object.fromEntries(Object.keys(baseConfig).map(key => [key, {
+        enumerable: true,
+        get: () => baseConfig[key as keyof Config],
+        set: (value: never) => { (baseConfig as unknown as Record<string, unknown>)[key] = value; },
+    }])),
+    profile: contextual("profile", () => currentContext()?.profile),
+    spendingEnabled: contextual("spendingEnabled", () => currentContext()?.spendingEnabled),
+    readOnly: contextual("readOnly", () => {
+        const context = currentContext();
+        if (!context) return undefined;
+        return !context.scopes.includes("manage") && !context.spendingEnabled;
+    }),
+    // Password login is never available over HTTP, and neither are host credentials.
+    loginToolEnabled: contextual("loginToolEnabled", () => (currentContext() ? false : undefined)),
+    autoLoginOn401: contextual("autoLoginOn401", () => (currentContext() ? false : undefined)),
+    login: contextual("login", () => (currentContext() ? "" : undefined)),
+    password: contextual("password", () => (currentContext() ? "" : undefined)),
+    apiToken: contextual("apiToken", () => currentContext()?.token),
+});

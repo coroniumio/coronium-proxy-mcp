@@ -1,8 +1,8 @@
 {
   "name": "coronium-mobile-proxies",
   "displayName": "Coronium Mobile Proxies",
-  "version": "1.0.3",
-  "description": "Check the health of the dedicated 4G/5G mobile proxies you rent from Coronium.io, rotate their IP, get connection details, compare plans and renewal quotes, and open support tickets, from Claude Code. The plugin runs the server's directory profile, which has no money tools, so it does not spend. Spending is off by default in the server too; its separate buyer profile with CORONIUM_ENABLE_SPENDING=1 can buy from your balance after you confirm the exact total.",
+  "version": "1.1.0",
+  "description": "Check the health of the dedicated 4G/5G mobile proxies you rent from Coronium.io, rotate their IP, get connection details, compare plans and renewal quotes, and open support tickets. Works in Claude Code with a local server, and in claude.ai and Cowork through the hosted Coronium connector with your Coronium sign-in. The plugin runs the server's directory profile, which has no money tools, so it does not spend. Spending is off by default in the server too; its separate buyer profile with CORONIUM_ENABLE_SPENDING=1 can buy from your balance after you confirm the exact total.",
   "author": {
     "name": "Coronium",
     "email": "hello@coronium.io",

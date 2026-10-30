@@ -9,6 +9,12 @@ import {fileURLToPath, pathToFileURL} from "node:url";
 
 const PLUGIN_NAME = "coronium-mobile-proxies";
 const API_HOST = "https://api.coronium.io/api/v3";
+// The hosted server the plugin may point at. It must be the directory resource, which
+// never registers money tools, and the exact URL submitted to the connector directory
+// (Claude Code dedupes plugin servers and claude.ai connectors by URL).
+const STDIO_SERVER_NAME = "coronium";
+const REMOTE_SERVER_NAME = "coronium-remote";
+const REMOTE_URL = "https://api.coronium.io/mcp";
 
 // The directory scan blocks or holds on these files anywhere in the plugin folder.
 const FORBIDDEN_FILE_NAMES = new Set([".DS_Store", "Thumbs.db", ".npmrc", "bunfig.toml", "uv.toml", "package.json", "package-lock.json", ".env"]);
@@ -137,12 +143,31 @@ function compareVersions(left, right) {
     return 0;
 }
 
+function checkRemoteServer(server) {
+    const problems = [];
+    if (!server || typeof server !== "object") return [`.mcp.json: ${REMOTE_SERVER_NAME} must be an object`];
+    if (server.type !== "http") problems.push(`.mcp.json: ${REMOTE_SERVER_NAME} must use type http`);
+    if (server.url !== REMOTE_URL) problems.push(`.mcp.json: ${REMOTE_SERVER_NAME} must point at exactly ${REMOTE_URL}`);
+    // A fixed Authorization header would disable the OAuth sign-in and hold a secret.
+    if ("headers" in server) problems.push(`.mcp.json: ${REMOTE_SERVER_NAME} must not set headers`);
+    for (const key of Object.keys(server)) {
+        if (!["type", "url", "oauth"].includes(key)) problems.push(`.mcp.json: ${REMOTE_SERVER_NAME} must not set ${key}`);
+    }
+    if (/\$\{/.test(JSON.stringify(server))) problems.push(`.mcp.json: ${REMOTE_SERVER_NAME} must not read user or shell values`);
+    return problems;
+}
+
 function checkServerConfig(pluginDir, packageVersion) {
     const problems = [];
     const servers = JSON.parse(readFileSync(join(pluginDir, ".mcp.json"), "utf8")).mcpServers ?? {};
     const names = Object.keys(servers);
-    if (names.length !== 1) return [`.mcp.json: expected exactly one server, found ${names.length}`];
-    const server = servers[names[0]];
+    const allowed = [STDIO_SERVER_NAME, REMOTE_SERVER_NAME];
+    const unexpected = names.filter(name => !allowed.includes(name));
+    if (!names.includes(STDIO_SERVER_NAME) || unexpected.length) {
+        return [`.mcp.json: expected the ${STDIO_SERVER_NAME} server and optionally ${REMOTE_SERVER_NAME}, found ${names.join(", ") || "none"}`];
+    }
+    if (names.includes(REMOTE_SERVER_NAME)) problems.push(...checkRemoteServer(servers[REMOTE_SERVER_NAME]));
+    const server = servers[STDIO_SERVER_NAME];
     const environment = server.env ?? {};
     if (server.command !== "npx") problems.push(".mcp.json: the server must start with npx");
     const pinArg = (server.args ?? []).find(arg => arg.startsWith("coronium-proxy-mcp"));

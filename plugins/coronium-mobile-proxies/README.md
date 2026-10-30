@@ -1,6 +1,6 @@
 # Coronium Mobile Proxies
 
-Manage the dedicated mobile proxies you rent from [Coronium.io](https://www.coronium.io) without leaving Claude Code. Each Coronium proxy runs on a real 4G/5G SIM device on a mobile carrier network. With this plugin, Claude can list your proxies, check their health, run a connectivity test, rotate the IP, show connection details for your tools, compare plans and renewal quotes, and open or follow support tickets.
+Manage the dedicated mobile proxies you rent from [Coronium.io](https://www.coronium.io) from Claude Code, claude.ai and Cowork. Each Coronium proxy runs on a real 4G/5G SIM device on a mobile carrier network. With this plugin, Claude can list your proxies, check their health, run a connectivity test, rotate the IP, show connection details for your tools, compare plans and renewal quotes, and open or follow support tickets.
 
 This plugin cannot make purchases. Buying, renewing, topping up and cancelling happen in the dashboard at https://dashboard.coronium.io.
 
@@ -9,8 +9,8 @@ Spending is off by default in the Coronium MCP server as well. If you want an ag
 ## Requirements
 
 - A Coronium account with at least one proxy, and its dashboard API token.
-- Claude Code. The plugin starts a local server, so claude.ai chat and Cowork are not supported yet. This README will be updated when they are.
-- Node.js 20 or later, because Claude Code starts the server with `npx`.
+- For the local server: Claude Code and Node.js 20 or later, because Claude Code starts it with `npx`.
+- For the hosted server: claude.ai, the Claude desktop app, Cowork or Claude Code, and your Coronium dashboard sign-in. No token to copy.
 
 ## Setup
 
@@ -23,6 +23,20 @@ Spending is off by default in the Coronium MCP server as well. If you want an ag
 2. Create your API token in the Coronium dashboard: https://dashboard.coronium.io, then Account -> API Access.
 3. When you enable the plugin, Claude Code asks for the token. Paste it into that dialog, never into the chat. Claude Code stores it in your system's secure credential store, marked as sensitive.
 4. Run `/mcp` and check that `plugin:coronium-mobile-proxies:coronium` is connected.
+
+## Use it in claude.ai and Cowork
+
+The plugin also declares the hosted Coronium server, `coronium-remote`, at `https://api.coronium.io/mcp`. It runs the same `directory` tool set on Coronium's servers, so nothing is installed on your computer.
+
+1. In claude.ai or Cowork, open the plugin's Connectors tab and connect Coronium. Without the plugin, add a custom connector with the URL `https://api.coronium.io/mcp`.
+2. A Coronium page opens. Sign in to your Coronium dashboard in that browser if you are not signed in, check the app name and the permissions it asks for, and approve.
+3. Claude can now read your proxies and, with the manage permission, test, rotate and replace them and work with tickets.
+
+To see or disconnect AI apps, open https://dashboard.coronium.io/api/v1/oauth/connections while signed in. Disconnecting stops that app at once. The hosted directory address never buys, renews, tops up or cancels, whatever you approve.
+
+In Claude Code you can use either server. To use only the hosted one, run `claude mcp add --transport http coronium https://api.coronium.io/mcp`, then `/mcp` to sign in.
+
+## API token for the local server
 
 Use the dashboard API token, not a login session token. You can revoke it at any time by rotating it in the dashboard, and the plugin stops working until you enter the new one.
 
@@ -44,9 +58,9 @@ Rotation waits for the carrier to hand out a new IP, which can take a minute or 
 
 ## What it runs
 
-The plugin declares one local MCP server. Claude Code starts it with `npx -y coronium-proxy-mcp@2.2.1`, which downloads that exact, pinned version from the npm registry and runs it on your computer over stdio. Source code: https://github.com/coroniumio/coronium-proxy-mcp.
+The plugin declares two MCP servers. The local one, `coronium`, is what Claude Code starts by default: it with `npx -y coronium-proxy-mcp@2.3.0`, downloading that exact, pinned version from the npm registry and running it on your computer over stdio. The hosted one, `coronium-remote`, is the same code run by Coronium at `https://api.coronium.io/mcp`, reached over HTTPS with your Coronium sign-in. Source code: https://github.com/coroniumio/coronium-proxy-mcp.
 
-The server runs in its `directory` profile. In this profile it has no tools that buy, renew, top up, cancel or refund, and no login tool. No tool asks for your Coronium account password or API token in the chat; the token comes only from the plugin setting.
+Both run the `directory` profile. In this profile it has no tools that buy, renew, top up, cancel or refund, and no login tool. No tool asks for your Coronium account password or API token in the chat. The local server takes the token only from the plugin setting; the hosted server uses the sign-in you approve on the Coronium page.
 
 ## What it will not do
 
@@ -59,7 +73,8 @@ The server runs in its `directory` profile. In this profile it has no tools that
 - The server sends requests only to `https://api.coronium.io`, operated by Coronium: the customer API at `/api/v3` with your API token, and the public plan catalogue at `/api/v1/tariffs` without it. The address is fixed in the plugin configuration.
 - The only other network traffic is `npx` downloading the pinned package from registry.npmjs.org when the server starts.
 - With your token it reads your Coronium account details, balance, owned proxies and their connection credentials, plans and prices, and your support tickets. It sends only what you ask for, such as a rotation request or the text of a ticket.
-- Nothing is stored by the plugin. The server keeps data in memory while it runs and writes no files. Your token is held by Claude Code as a sensitive setting, not by the plugin.
+- Nothing is stored by the plugin. The local server keeps data in memory while it runs and writes no files. Your token is held by Claude Code as a sensitive setting, not by the plugin.
+- The hosted server keeps no copy of your data. Coronium stores only a record of each connected AI app (its name and address, the permissions you approved and when it was last used) and hashes of its sign-in tokens, never the tokens themselves. Access tokens last one hour and are renewed by your AI app until you disconnect it. Request logs hold the tool name and argument names, never their values, credentials or ticket text.
 - There is no analytics or telemetry.
 - Proxy credentials are secrets. Claude shows them to you and does not write them to files unless you ask.
 - Coronium's privacy policy: https://www.coronium.io/privacy-policy
@@ -70,7 +85,8 @@ Coronium proxies are for lawful purposes, such as app and website QA, ad verific
 
 ## Troubleshooting
 
-- `401` or "invalid token": the token is wrong, expired or was rotated. Create a new one in the dashboard and update it in the plugin settings.
+- Hosted server asks you to sign in again: the connection was disconnected in the dashboard or has not been used for 30 days. Connect it again from the Connectors tab.
+- `401` or "invalid token" on the local server: the token is wrong, expired or was rotated. Create a new one in the dashboard and update it in the plugin settings.
 - The server does not start: the token is not set, or Node.js 20+ is missing. `/mcp` shows the connection state and the error.
 - A rotation says it is still running: ask Claude to check the rotation status in a minute. Do not start another rotation in the meantime.
 - A rotation is refused with a wait time: the proxy has a cooldown between rotations. Try again after the time shown.

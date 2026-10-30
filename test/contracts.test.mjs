@@ -99,7 +99,7 @@ after(async () => {await new Promise(resolve => backend.close(resolve)); rmSync(
 
 test('MCP initialization, all tool schemas, annotations, resources and prompts', async () => {
     const client = await connect();
-    assert.equal(client.getServerVersion().version, '2.2.1');
+    assert.equal(client.getServerVersion().version, JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
     const {tools} = await client.listTools();
     assert.equal(tools.length, 65);
     assert.equal(new Set(tools.map(tool => tool.name)).size, tools.length);
@@ -539,7 +539,7 @@ test('real stdio transport starts cleanly, accepts API_KEY alias and exposes val
     let stderr = ''; transport.stderr?.on('data', chunk => {stderr += chunk;});
     try {
         await client.connect(transport);
-        assert.equal(client.getServerVersion().version, '2.2.1');
+        assert.equal(client.getServerVersion().version, JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
         assert.equal(data(await call('get_balance', {}, client)).account_credit.amount, 320);
         assert.equal(last('/account').headers.authorization, 'Bearer alias-fixture-token');
         assert.equal(stderr, '');

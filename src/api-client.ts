@@ -1,6 +1,7 @@
 import axios, {type AxiosResponse} from "axios";
 import {createHash} from "node:crypto";
 import {config} from "./config.js";
+import {currentContext} from "./context.js";
 import {classifyError, CoroniumError, type ErrorDetails, invalidResponse, normalizeErrorCode, redact, retryAfterSeconds} from "./errors.js";
 import {spendingAllowed} from "./profiles.js";
 import {tokenStore} from "./token-store.js";
@@ -31,7 +32,15 @@ export interface RequestOptions {
 interface PaymentIntent {
     fingerprint: string;
     result: Promise<ApiObject>;
+    createdAt: number;
 }
+
+// Hosted mode serves many users from one process. Intents there are keyed on the
+// connection (access tokens change hourly), expire after 24 hours, and each
+// connection keeps at most this many, evicting its oldest first. The backend's own
+// idempotency layer stays the real guard against a double charge.
+const HOSTED_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
+const HOSTED_INTENTS_PER_CONNECTION = 500;
 
 const HTML_PATTERN = /^\s*(?:<!doctype\s+html|<html|<head|<body)\b/i;
 const AUTH_FAILURE_PATTERN = /no auth token|unauthori[sz]ed|jwt expired|invalid (?:auth )?token|not authenticated/i;
@@ -111,6 +120,13 @@ function httpError(response: AxiosResponse, body: ApiObject, mutates: boolean, o
 
 export function assertSpendingAllowed(): void {
     if (spendingAllowed(config.profile, config.spendingEnabled)) return;
+    if (currentContext()) {
+        throw new CoroniumError({
+            code: "spending_disabled",
+            message: "Purchases are turned off for this connection. The account owner can turn them on at https://dashboard.coronium.io/api/v1/oauth/connections for a connection made to the buyer address. Use https://dashboard.coronium.io to pay.",
+            suggested_action: "use_dashboard",
+        });
+    }
     throw new CoroniumError({
         code: "spending_disabled",
         message: "Spending and refund actions are turned off. They need CORONIUM_TOOL_PROFILE=full or buyer, and CORONIUM_ENABLE_SPENDING=1. Use https://dashboard.coronium.io to pay.",
@@ -131,6 +147,7 @@ export class CoroniumAPI {
     }
 
     logout(): void {
+        if (currentContext()) return;
         tokenStore.clear();
         this.autoLoginDisabled = true;
     }
@@ -148,6 +165,12 @@ export class CoroniumAPI {
     }
 
     private async authenticate(): Promise<string> {
+        const context = currentContext();
+        // Hosted requests carry their own bearer and never fall back to host credentials.
+        if (context) {
+            if (context.token) return context.token;
+            throw new CoroniumError({code: "not_authenticated", message: "Sign in to Coronium again from your AI app's connector settings.", suggested_action: "authenticate"});
+        }
         const current = tokenStore.get();
         if (current) return current;
         if (!config.autoLoginOn401 || this.autoLoginDisabled || !config.login || !config.password) {
@@ -162,6 +185,7 @@ export class CoroniumAPI {
     }
 
     private canRefreshLogin(attempt: number, method: Method, mutates: boolean, token: string | undefined, options: RequestOptions): boolean {
+        if (currentContext()) return false;
         if (attempt > 0 || mutates || method !== "GET" || options.token || options.public) return false;
         // An explicitly configured API token is never swapped for a login token.
         if (token === config.apiToken) return false;
@@ -237,21 +261,37 @@ export class CoroniumAPI {
         // and the transport refuses money calls on its own as well.
         assertSpendingAllowed();
         const token = await this.authenticate();
-        const accountScope = createHash("sha256").update(token).digest("hex");
+        const context = currentContext();
+        const accountScope = context
+            ? `connection:${context.connectionId}`
+            : createHash("sha256").update(token).digest("hex");
         const key = `${accountScope}:${idempotencyKey}`;
         const fingerprint = createHash("sha256").update(JSON.stringify({path, body})).digest("hex");
+        if (context) this.pruneHostedIntents(accountScope);
         const previous = this.paymentIntents.get(key);
         if (previous) {
             if (previous.fingerprint !== fingerprint) throw new CoroniumError({code: "idempotency_conflict",
                 message: "This key already identifies a different payment request in this session. Do not change a payment's payload or route while reconciling it.", idempotency_key: idempotencyKey});
             return previous.result;
         }
-        if (this.paymentIntents.size >= 10_000) throw new CoroniumError({code: "session_intent_limit", message: "Restart the MCP after reconciling outstanding payments; the session intent limit was reached."});
+        if (!context && this.paymentIntents.size >= 10_000) throw new CoroniumError({code: "session_intent_limit", message: "Restart the MCP after reconciling outstanding payments; the session intent limit was reached."});
         // Coalesce concurrent identical calls. Keep both successes and failures:
         // an ambiguous payment must be reconciled, never automatically resubmitted.
         const result = this.post(path, body, {token, idempotencyKey, receipt: true, timeoutMs: config.actionTimeoutMs});
-        this.paymentIntents.set(key, {fingerprint, result});
+        this.paymentIntents.set(key, {fingerprint, result, createdAt: Date.now()});
         return result;
+    }
+
+    private pruneHostedIntents(accountScope: string): void {
+        const now = Date.now();
+        const prefix = `${accountScope}:`;
+        const own: string[] = [];
+        for (const [key, intent] of this.paymentIntents) {
+            if (now - intent.createdAt > HOSTED_INTENT_TTL_MS) this.paymentIntents.delete(key);
+            else if (key.startsWith(prefix)) own.push(key);
+        }
+        // Map iteration follows insertion order, so the first keys are the oldest.
+        for (const key of own.slice(0, Math.max(0, own.length - HOSTED_INTENTS_PER_CONNECTION + 1))) this.paymentIntents.delete(key);
     }
 }
 

@@ -131,3 +131,12 @@ test('forbidden files and a second marketplace plugin are refused', () => {
     const marketplace = join('.claude-plugin', 'marketplace.json');
     assertFlagged(problemsAfter(dir => editJson(dir, marketplace, value => { value.plugins.push({name: 'coronium-proxy-buyer', source: './plugins/coronium-proxy-buyer'}); })), 'must list only');
 });
+
+test('the hosted server entry is the directory URL over http, with no headers or user values', () => {
+    const config = JSON.parse(readFileSync(join(repoDir, mcpJson), 'utf8'));
+    assert.deepEqual(config.mcpServers['coronium-remote'], {type: 'http', url: 'https://api.coronium.io/mcp'});
+    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers['coronium-remote'].url = 'https://api.coronium.io/mcp/buyer'; })), 'must point at exactly');
+    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers['coronium-remote'].headers = {Authorization: 'Bearer ${user_config.api_token}'}; })), 'must not set headers');
+    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers['coronium-remote'].type = 'sse'; })), 'type http');
+    assertFlagged(problemsAfter(dir => editJson(dir, mcpJson, value => { value.mcpServers['coronium-buyer'] = {type: 'http', url: 'https://api.coronium.io/mcp/buyer'}; })), 'optionally coronium-remote');
+});

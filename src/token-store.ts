@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {config} from "./config.js";
+import {currentContext} from "./context.js";
 
 // Environment tokens stay in memory. Login tokens persist only with an explicitly
 // configured encryption key; a random per-process key cannot protect a reusable cache.
@@ -15,9 +16,14 @@ class TokenStore {
         this.token = config.apiToken || this.load();
     }
 
-    get(): string | undefined { return this.token; }
+    // A hosted request always uses its own bearer and never the process token.
+    get(): string | undefined {
+        const context = currentContext();
+        return context ? context.token : this.token;
+    }
 
     set(token: string): void {
+        if (currentContext()) throw new Error("Token storage is not available in hosted mode.");
         this.token = token;
         if (!config.tokenEncryptionKey) return;
         const iv = crypto.randomBytes(12);
@@ -36,6 +42,7 @@ class TokenStore {
     }
 
     clear(): void {
+        if (currentContext()) return;
         this.token = undefined;
         fs.rmSync(this.file, {force: true});
     }

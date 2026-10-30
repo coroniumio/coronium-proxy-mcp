@@ -1,8 +1,8 @@
 # Coronium proxy MCP
 
-A local **stdio MCP server** for customers of Coronium.io dedicated 4G/5G mobile proxies. Version 2.2.1. It lets an AI agent check balances, list owned proxies with ready-to-use HTTP and SOCKS5 URLs, test and rotate proxies, replace a proxy, download an OpenVPN profile, compare plans and live stock by country and carrier, quote a purchase or a renewal, and work with support tickets. If you turn spending on, it can also buy from your account balance, after you approve the exact total.
+A local **stdio MCP server** for customers of Coronium.io dedicated 4G/5G mobile proxies. Version 2.3.0. It lets an AI agent check balances, list owned proxies with ready-to-use HTTP and SOCKS5 URLs, test and rotate proxies, replace a proxy, download an OpenVPN profile, compare plans and live stock by country and carrier, quote a purchase or a renewal, and work with support tickets. If you turn spending on, it can also buy from your account balance, after you approve the exact total.
 
-It talks only to the Coronium customer API at `https://api.coronium.io/api/v3` (plus the public plan catalog on the same host). It has no admin, server or reseller-management tools. Upgrading from 1.3.0 or 2.0.0? Read the [migration notes](CHANGELOG.md).
+It talks only to the Coronium customer API at `https://api.coronium.io/api/v3` (plus the public plan catalog on the same host). It has no admin, server or reseller-management tools. The same tools are also run by Coronium as a [hosted server](#hosted-server) at `https://api.coronium.io/mcp`, for claude.ai, the Claude apps and Cowork, with sign-in through your Coronium account. Upgrading from 1.3.0 or 2.0.0? Read the [migration notes](CHANGELOG.md).
 
 ## Connect
 
@@ -13,7 +13,7 @@ Requires **Node.js 20 or newer**. Configure your MCP host to launch the pinned v
   "mcpServers": {
     "coronium": {
       "command": "npx",
-      "args": ["-y", "coronium-proxy-mcp@2.2.1"],
+      "args": ["-y", "coronium-proxy-mcp@2.3.0"],
       "env": {
         "CORONIUM_API_TOKEN": "YOUR_CORONIUM_API_TOKEN",
         "CORONIUM_TOOL_PROFILE": "directory"
@@ -34,7 +34,7 @@ If you want an agent to buy for you, use the `buyer` profile and turn spending o
   "mcpServers": {
     "coronium": {
       "command": "npx",
-      "args": ["-y", "coronium-proxy-mcp@2.2.1"],
+      "args": ["-y", "coronium-proxy-mcp@2.3.0"],
       "env": {
         "CORONIUM_API_TOKEN": "YOUR_CORONIUM_API_TOKEN",
         "CORONIUM_TOOL_PROFILE": "buyer",
@@ -49,6 +49,25 @@ Leave `CORONIUM_ENABLE_SPENDING` out and the same profile can look, quote and ma
 
 Set the host's tool timeout above **180 seconds**: rotation, replacement and payment calls wait for the backend. If a call times out, check its outcome before acting again. The process uses stdout only for MCP JSON-RPC.
 
+## Hosted server
+
+Coronium runs this server over Streamable HTTP, so it works where a local server cannot: claude.ai, the Claude desktop and mobile apps, and Cowork, as well as Claude Code.
+
+**Works in claude.ai:** add a custom connector with the URL `https://api.coronium.io/mcp`, then sign in with your Coronium account. A Coronium page opens; sign in to your dashboard in that browser if needed, check the app and the permissions, and approve. Nothing to install and no token to copy.
+
+**Claude Code:** `claude mcp add --transport http coronium https://api.coronium.io/mcp`, then `/mcp` to sign in. The Claude Code plugin in this repository declares the same URL as `coronium-remote`, next to the local server.
+
+How it works:
+
+- Sign-in is OAuth 2.1 with PKCE (S256). Clients register dynamically or with a client ID metadata document. Access tokens last one hour; refresh tokens rotate on every use, and a reused refresh token ends that sign-in. Coronium stores only hashes of tokens.
+- `https://api.coronium.io/mcp` runs the `directory` profile. Permissions: `read` (account, balance, proxies, plans, prices, tickets) and `manage` (test, rotate and replace proxies, OpenVPN profiles, open and answer tickets). It has no tools that buy, renew, top up, cancel or refund, whatever you approve.
+- `https://api.coronium.io/mcp/buyer` is a separate address for agents that buy, for use as a custom connector. It runs the `buyer` profile. Purchases are off for every connection: the buy tool appears only after you allow purchases for that one connection, on the consent page or later in the dashboard, with your password. Each purchase still needs `confirm: true`, the quoted `expected_total_usd` and a new `idempotency_key`, and the API refuses a higher total.
+- See and disconnect connected apps at https://dashboard.coronium.io/api/v1/oauth/connections while signed in to the dashboard. Disconnecting stops an app at once.
+- API clients can also send a dashboard API token as the Bearer token. It gets `read` and `manage` and never spends.
+- The hosted server keeps no customer data. Its logs hold the tool name and argument names, never values, credentials or ticket text.
+
+Run your own copy over HTTP with `npx -y -p coronium-proxy-mcp@2.3.0 coronium-proxy-mcp-http` behind a TLS proxy. It needs an OAuth authorization server that answers the token check described in `src/remote-auth.ts`; settings: `PORT` (default 5031), `HOST` (default 127.0.0.1), `MCP_PUBLIC_URL`, `MCP_ALLOWED_HOSTS`, `MCP_ALLOWED_ORIGINS` and `CORONIUM_BASE_URL`. It refuses to start with `CORONIUM_API_TOKEN`, a password or `CORONIUM_ENABLE_SPENDING` in its environment, because it only acts with each caller's own sign-in.
+
 ## Install from a listing
 
 [![coroniumio/coronium-proxy-mcp MCP server](https://glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp/badges/score.svg)](https://glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp)
@@ -60,7 +79,7 @@ Set the host's tool timeout above **180 seconds**: rotation, replacement and pay
   ```
   Details: [plugins/coronium-mobile-proxies](plugins/coronium-mobile-proxies#readme).
 - **Official MCP Registry**: `io.github.coroniumio/coronium-proxy-mcp` ([registry entry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.coroniumio/coronium-proxy-mcp)). Hosts that read the registry install the npm package `coronium-proxy-mcp`.
-- **npm**: `npx -y coronium-proxy-mcp@2.2.1` with the environment shown under [Connect](#connect).
+- **npm**: `npx -y coronium-proxy-mcp@2.3.0` with the environment shown under [Connect](#connect).
 - **Glama**: [glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp](https://glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp).
 
 ## Tool profiles

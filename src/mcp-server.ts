@@ -1,6 +1,7 @@
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {z} from "zod";
 import {config, SERVER_NAME, SERVER_VERSION} from "./config.js";
+import {currentContext} from "./context.js";
 import {spendingAllowed} from "./profiles.js";
 import {finishToolRegistration, registerTool} from "./tool.js";
 import {registerAuthTools} from "./tools/auth.js";
@@ -69,10 +70,15 @@ function registerPrompts(server: McpServer): void {
 
 function capabilities(): Record<string, unknown> {
     const spending = spendingAllowed(config.profile, config.spendingEnabled);
+    const context = currentContext();
+    // Hosted connections describe their own transport, auth and scopes. Never the token.
+    const transport = context
+        ? {transport: context.transport, auth: context.auth === "oauth" ? "oauth" : "dashboard_api_token", scopes: [...context.scopes], resource: context.resource,
+            api_base_url: "https://api.coronium.io/api/v3"}
+        : {transport: "stdio", auth: "CORONIUM_API_TOKEN", api_base_url: config.baseUrl};
     return {
-        version: SERVER_VERSION, transport: "stdio", profile: config.profile, read_only: config.readOnly,
+        version: SERVER_VERSION, ...transport, profile: config.profile, read_only: config.readOnly,
         spending_enabled: spending, login_tool_enabled: config.loginToolEnabled && !["directory", "buyer"].includes(config.profile),
-        api_base_url: config.baseUrl, auth: "CORONIUM_API_TOKEN",
         modem_funding_sources: spending ? ["account_credit", "btc"] : [],
         pool_funding_sources: spending ? ["account_credit"] : [],
         payments: spending ? "in this MCP after explicit approval of the exact total" : `in the dashboard: ${DASHBOARD_URL}`,

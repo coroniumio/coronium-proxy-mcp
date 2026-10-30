@@ -1,6 +1,6 @@
 # Coronium proxy MCP
 
-> Local stdio MCP for customers of Coronium.io dedicated 4G/5G mobile proxies: balances, owned proxies with HTTP and SOCKS5 URLs, testing, rotation, replacement, OpenVPN, plans and stock, purchase and renewal quotes, support tickets, and buying from the account balance when the host turns spending on. Version 2.2.1. Requires Node 20+.
+> Local stdio MCP for customers of Coronium.io dedicated 4G/5G mobile proxies: balances, owned proxies with HTTP and SOCKS5 URLs, testing, rotation, replacement, OpenVPN, plans and stock, purchase and renewal quotes, support tickets, and buying from the account balance when the host turns spending on. Version 2.3.0. Requires Node 20+.
 
 - [Setup, profiles, behaviour and tool catalog](https://github.com/coroniumio/coronium-proxy-mcp/blob/main/README.md)
 - [Migration from 1.3.0](https://github.com/coroniumio/coronium-proxy-mcp/blob/main/CHANGELOG.md)
@@ -8,7 +8,8 @@
 - [Source](https://github.com/coroniumio/coronium-proxy-mcp)
 - [npm package](https://www.npmjs.com/package/coronium-proxy-mcp)
 
-Run the pinned package: npx -y coronium-proxy-mcp@2.2.1.
+Run the pinned package: npx -y coronium-proxy-mcp@2.3.0.
+Hosted server: https://api.coronium.io/mcp over Streamable HTTP with OAuth 2.1 sign-in through the Coronium account (claude.ai custom connector, Claude apps, Cowork, Claude Code). It runs the directory profile and never spends. https://api.coronium.io/mcp/buyer runs the buyer profile; its buy tool appears only when the user turned purchases on for that connection.
 Authenticate with CORONIUM_API_TOKEN (dashboard API token, Account, API Access). CORONIUM_API_KEY is an alias. The password login tool exists only with CORONIUM_ENABLE_LOGIN_TOOL=1. Requests go to https://api.coronium.io/api/v3 unless CORONIUM_BASE_URL overrides it.
 CORONIUM_TOOL_PROFILE: buyer (12 tools, 13 with spending on: plans, stock, quote, buy, payment status, proxies, test, rotate, replace, balances), directory (21-tool allowlist, no money tools), full (default), read-only. Spending tools need CORONIUM_ENABLE_SPENDING=1 with the full or buyer profile; otherwise pay at https://dashboard.coronium.io. Tools are listed alphabetically.
 Discover exact schemas via tools/list. Read MCP resource coronium://guide. coronium_get_capabilities reports profile and spending state without network access.

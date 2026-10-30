@@ -90,3 +90,13 @@ export function isToolEnabled(profile: ToolProfile, spendingEnabled: boolean, na
     if (profile === "read-only") return traits.access !== "write";
     return true;
 }
+
+// Hosted connections narrow the profile further by OAuth scope: `read` for reads,
+// `manage` for everyday writes (rotate, replace, test, tickets), and money tools only
+// when the connection's spending switch is on, which already requires `spend`.
+export function isScopeAllowed(scopes: readonly string[], spendingEnabled: boolean, traits: ToolTraits): boolean {
+    if (traits.access === "auth") return false;
+    if (traits.money !== "none") return spendingEnabled && scopes.includes("spend");
+    if (traits.access === "write") return scopes.includes("manage");
+    return scopes.includes("read");
+}

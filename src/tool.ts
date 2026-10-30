@@ -1,8 +1,9 @@
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {z} from "zod";
 import {config} from "./config.js";
+import {currentContext} from "./context.js";
 import {errorDetails} from "./errors.js";
-import {type Access, isToolEnabled, type MoneyEffect} from "./profiles.js";
+import {type Access, isScopeAllowed, isToolEnabled, type MoneyEffect} from "./profiles.js";
 
 // "METHOD /path" with :params, exactly as in test/fixtures/v3-routes.json.
 export type RouteRef = `${"GET" | "POST" | "PUT" | "DELETE"} /${string}`;
@@ -55,6 +56,8 @@ export function registerTool<S extends z.ZodRawShape>(server: McpServer, name: s
     const money: MoneyEffect = options.money ?? "none";
     toolDefinitions.set(name, {name, access, money, routes: options.routes});
     if (!isToolEnabled(config.profile, config.spendingEnabled, name, {access, money}, config.loginToolEnabled)) return;
+    const context = currentContext();
+    if (context && !isScopeAllowed(context.scopes, context.spendingEnabled, {access, money})) return;
     // Money tools are always marked destructive so hosts that gate on the hint prompt.
     const destructive: boolean = money !== "none" || (options.destructive ?? false);
     const outputSchema = z.object({data: options.output ?? z.record(z.unknown()), observed_at: z.string()});
