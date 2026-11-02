@@ -59,7 +59,10 @@ export function registerTool<S extends z.ZodRawShape>(server: McpServer, name: s
     const context = currentContext();
     if (context && !isScopeAllowed(context.scopes, context.spendingEnabled, {access, money})) return;
     // Money tools are always marked destructive so hosts that gate on the hint prompt.
-    const destructive: boolean = money !== "none" || (options.destructive ?? false);
+    // Every tool that is not read-only is marked destructive too: the Claude connector
+    // directory requires each tool to be readOnlyHint:true or destructiveHint:true, and a
+    // write (ticket, test, VPN profile) should be confirmed by the user before it runs.
+    const destructive: boolean = money !== "none" || access !== "read" || (options.destructive ?? false);
     const outputSchema = z.object({data: options.output ?? z.record(z.unknown()), observed_at: z.string()});
     const register: Registration = () => server.registerTool(name, {
         title: title(name),

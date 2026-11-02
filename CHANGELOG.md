@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.1 - 2026-11-02
+
+- Every tool that is not read-only now carries `destructiveHint: true` (create/reply ticket, test modem, OpenVPN config), so each tool is either read-only or destructive, as the Claude connector directory requires. Hosts will ask the user to confirm those writes.
+
 ## Plugin 1.2.0 - 2026-10-30
 
 ### Changed
