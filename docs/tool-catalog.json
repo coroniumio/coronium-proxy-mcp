@@ -1,5 +1,5 @@
 {
-  "version": "2.3.0",
+  "version": "2.3.1",
   "tools": [
     {
       "name": "coronium_apply_modem_settings",
@@ -244,7 +244,7 @@
       "annotations": {
         "title": "Build pool proxy url",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true
       },
@@ -291,7 +291,7 @@
       "annotations": {
         "title": "Build saved pool session url",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true
       },
@@ -888,7 +888,7 @@
       "annotations": {
         "title": "Create ticket",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true
       },
@@ -1242,7 +1242,7 @@
       "annotations": {
         "title": "Get crypto balance",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true
       },
@@ -1330,7 +1330,7 @@
       "annotations": {
         "title": "Get openvpn config",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true
       },
@@ -2165,7 +2165,7 @@
       "annotations": {
         "title": "List pool keys",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true
       },
@@ -2441,7 +2441,7 @@
       "annotations": {
         "title": "Login",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true
       },
@@ -2480,7 +2480,7 @@
       "annotations": {
         "title": "Logout",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": true,
         "openWorldHint": true
       },
@@ -2817,7 +2817,7 @@
       "annotations": {
         "title": "Reply to ticket",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true
       },
@@ -3184,7 +3184,7 @@
       "annotations": {
         "title": "Save pool session",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": true,
         "openWorldHint": true
       },
@@ -3239,7 +3239,7 @@
       "annotations": {
         "title": "Set low balance threshold",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": true,
         "openWorldHint": true
       },
@@ -3301,7 +3301,7 @@
       "annotations": {
         "title": "Set modem metadata",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": true,
         "openWorldHint": true
       },
@@ -3608,7 +3608,7 @@
       "annotations": {
         "title": "Start speed test",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true
       },
@@ -3657,7 +3657,7 @@
       "annotations": {
         "title": "Test modem",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true
       },
@@ -3705,7 +3705,7 @@
       "annotations": {
         "title": "Test webhook",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true
       },
