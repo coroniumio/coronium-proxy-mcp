@@ -1,8 +1,23 @@
 # Changelog
 
+## 2.4.2 - 2026-11-03
+
+Docs and listing metadata only. No tool was added, removed, renamed or re-described: `tools/list` is the same as in 2.4.1 apart from the version. Profile counts: directory 22, buyer 15 or 20 with spending on, read-only 32, full 60 or 69 with spending on. Without a token or login, the local buyer and full profiles also list `coronium_create_account` (never on the hosted server). `docs/tool-catalog.json` holds all 72 tool schemas: 70 plus the opt-in `coronium_login` and `coronium_logout`.
+
+### Changed
+
+- `server.json` (MCP Registry): `CORONIUM_API_TOKEN` is optional (`isRequired: false`), because the buyer and full profiles offer `coronium_create_account` when no token is set. The description now covers buying, and the `CORONIUM_ENABLE_SPENDING` description names the money tools it adds (buy and renew by account credit, BTC or a saved card, crypto to credit; full also pool purchases and cancel with refund).
+- `package.json` description: quote, buy and renew after explicit approval, spending off by default.
+- `smithery.yaml` pins `coronium-proxy-mcp@2.4.2` (it still pinned 2.2.1) and states the current counts: directory 22, read-only 32, buyer 15, full 60. Spending stays off there and the token stays required.
+- README: tool counts for every profile and both hosted addresses, the 72-schema total, `create_account` is never on the hosted server, cards cannot be added through the API, the registry entry also points at the hosted remote, and the Claude Code plugin declares only the hosted `coronium` server (the README still described the plugin 1.1.0 layout with `coronium-remote` next to a local server).
+- llms.txt, SKILL.md and AGENTS.md: the same counts; the API token from `GET /api/v1/account/api-token` lasts 365 days; the verification email after signup blocks nothing; the local buyer profile works with spending off.
+- docs/backend-contract.md: dedicated-proxy buys and renewals send the approved total to the server as `max_total_usd` (the page still said the server never receives it). Pool purchases, pool top-ups and `min_refund_usd` remain client-side checks.
+- `.env.example` notes that the token is optional in the buyer and full profiles.
+- Version pins in README, SKILL.md and llms.txt move to 2.4.2. The plugin README states that the directory profile has 22 tools; the plugin itself is unchanged (1.3.0).
+
 ## 2.4.1 - 2026-11-03
 
-Agents can open their own account. Profile counts are unchanged (buyer adds `coronium_create_account` only while no credentials are configured).
+Agents can open their own account. Profile counts are unchanged (buyer and full add `coronium_create_account` only while no credentials are configured).
 
 ### Added
 

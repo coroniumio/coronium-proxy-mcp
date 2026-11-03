@@ -1,8 +1,8 @@
 {
   "name": "coronium-proxy-mcp",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "mcpName": "io.github.coroniumio/coronium-proxy-mcp",
-  "description": "Model Context Protocol server for Coronium.io dedicated 4G/5G mobile proxies: list, test, rotate and replace proxies, compare plans and stock, check balances and open support tickets.",
+  "description": "Model Context Protocol server for Coronium.io dedicated 4G/5G mobile proxies: list, test, rotate and replace proxies, compare plans and stock, quote, buy and renew after explicit approval (spending off by default), check balances and open support tickets.",
   "private": false,
   "type": "module",
   "main": "dist/server.js",

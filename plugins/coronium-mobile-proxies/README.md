@@ -52,7 +52,7 @@ Rotation waits for the carrier to hand out a new IP, which can take a minute or 
 
 The plugin declares one MCP server, `coronium`: the hosted Coronium server at `https://api.coronium.io/mcp`, reached over HTTPS with the sign-in you approve on the Coronium page. Source code: https://github.com/coroniumio/coronium-proxy-mcp.
 
-It runs the `directory` profile. In this profile it has no tools that buy, renew, top up, cancel or refund, and no login tool. No tool asks for your Coronium account password or API token in the chat.
+It runs the `directory` profile (22 tools). In this profile it has no tools that buy, renew, top up, cancel or refund, and no login tool. No tool asks for your Coronium account password or API token in the chat.
 
 ## What it will not do
 

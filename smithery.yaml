@@ -1,7 +1,7 @@
 # Smithery configuration for the Coronium proxy MCP server.
 # Local stdio server, launched with npx at a pinned version.
 # Spending is not exposed here: CORONIUM_ENABLE_SPENDING is never set,
-# so no profile chosen below can buy, renew, top up or cancel.
+# so no profile chosen below can buy, renew, move crypto to credit, top up or cancel.
 startCommand:
   type: stdio
   configSchema:
@@ -16,7 +16,7 @@ startCommand:
       coroniumToolProfile:
         type: string
         title: Tool profile
-        description: "directory (21 tools, the default), read-only (tools that change nothing), buyer (12 tools, look, quote and manage) or full (every non-money tool). Spending stays off in every profile here."
+        description: "directory (22 tools, the default), read-only (32 tools that change nothing), buyer (15 tools, look, quote and manage) or full (60 tools, every non-money tool). Spending stays off in every profile here."
         enum:
           - directory
           - read-only
@@ -26,7 +26,7 @@ startCommand:
   commandFunction: |-
     (config) => ({
       command: 'npx',
-      args: ['-y', 'coronium-proxy-mcp@2.2.1'],
+      args: ['-y', 'coronium-proxy-mcp@2.4.2'],
       env: {
         CORONIUM_API_TOKEN: config.coroniumApiToken,
         CORONIUM_TOOL_PROFILE: config.coroniumToolProfile || 'directory',

@@ -1,6 +1,6 @@
 # Coronium proxy MCP
 
-A local **stdio MCP server** for customers of Coronium.io dedicated 4G/5G mobile proxies. Version 2.4.1. It lets an AI agent check balances, list owned proxies with ready-to-use HTTP and SOCKS5 URLs, test and rotate proxies, replace a proxy, download an OpenVPN profile, compare plans and live stock by country and carrier, quote a purchase or a renewal, and work with support tickets. If you turn spending on, it can also buy from your account balance, after you approve the exact total.
+A local **stdio MCP server** for customers of Coronium.io dedicated 4G/5G mobile proxies. Version 2.4.2. It lets an AI agent check balances, list owned proxies with ready-to-use HTTP and SOCKS5 URLs, test and rotate proxies, replace a proxy, download an OpenVPN profile, compare plans and live stock by country and carrier, quote a purchase or a renewal, and work with support tickets. If you turn spending on, it can also buy and renew from your account balance or a saved card, and move your own USDT or BTC into account credit, after you approve the exact total. Started without a token, it can open a new account for an agent (see [Agents without a browser](#agents-without-a-browser)).
 
 It talks only to the Coronium customer API at `https://api.coronium.io/api/v3` (plus the public plan catalog on the same host). It has no admin, server or reseller-management tools. The same tools are also run by Coronium as a [hosted server](#hosted-server) at `https://api.coronium.io/mcp`, for claude.ai, the Claude apps and Cowork, with sign-in through your Coronium account. Upgrading from 1.3.0 or 2.0.0? Read the [migration notes](CHANGELOG.md).
 
@@ -13,7 +13,7 @@ Requires **Node.js 20 or newer**. Configure your MCP host to launch the pinned v
   "mcpServers": {
     "coronium": {
       "command": "npx",
-      "args": ["-y", "coronium-proxy-mcp@2.4.1"],
+      "args": ["-y", "coronium-proxy-mcp@2.4.2"],
       "env": {
         "CORONIUM_API_TOKEN": "YOUR_CORONIUM_API_TOKEN",
         "CORONIUM_TOOL_PROFILE": "directory"
@@ -34,7 +34,7 @@ If you want an agent to buy for you, use the `buyer` profile and turn spending o
   "mcpServers": {
     "coronium": {
       "command": "npx",
-      "args": ["-y", "coronium-proxy-mcp@2.4.1"],
+      "args": ["-y", "coronium-proxy-mcp@2.4.2"],
       "env": {
         "CORONIUM_API_TOKEN": "YOUR_CORONIUM_API_TOKEN",
         "CORONIUM_TOOL_PROFILE": "buyer",
@@ -60,7 +60,7 @@ An agent can open its own Coronium account, fund it and buy, with no browser and
   "mcpServers": {
     "coronium": {
       "command": "npx",
-      "args": ["-y", "coronium-proxy-mcp@2.4.1"],
+      "args": ["-y", "coronium-proxy-mcp@2.4.2"],
       "env": {"CORONIUM_TOOL_PROFILE": "buyer", "CORONIUM_ENABLE_SPENDING": "1"}
     }
   }
@@ -126,18 +126,19 @@ Coronium runs this server over Streamable HTTP, so it works where a local server
 
 **Works in claude.ai:** add a custom connector with the URL `https://api.coronium.io/mcp`, then sign in with your Coronium account. A Coronium page opens; sign in to your dashboard in that browser if needed, check the app and the permissions, and approve. Nothing to install and no token to copy.
 
-**Claude Code:** `claude mcp add --transport http coronium https://api.coronium.io/mcp`, then `/mcp` to sign in. The Claude Code plugin in this repository declares the same URL as `coronium-remote`, next to the local server.
+**Claude Code:** `claude mcp add --transport http coronium https://api.coronium.io/mcp`, then `/mcp` to sign in. The Claude Code plugin in this repository declares the same URL as its only server, `coronium`.
 
 How it works:
 
 - Sign-in is OAuth 2.1 with PKCE (S256). Clients register dynamically or with a client ID metadata document. Access tokens last one hour; refresh tokens rotate on every use, and a reused refresh token ends that sign-in. Coronium stores only hashes of tokens.
-- `https://api.coronium.io/mcp` runs the `directory` profile. Permissions: `read` (account, balance, proxies, plans, prices, tickets) and `manage` (test, rotate and replace proxies, OpenVPN profiles, open and answer tickets). It has no tools that buy, renew, top up, cancel or refund, whatever you approve.
-- `https://api.coronium.io/mcp/buyer` is a separate address for agents that buy, for use as a custom connector. It runs the `buyer` profile. Purchases are off for every OAuth connection: the money tools appear only after you allow purchases for that one connection, on the consent page or later in the dashboard, with your password. Each purchase still needs `confirm: true`, the quoted `expected_total_usd` and a new `idempotency_key`, and the API refuses a higher total.
+- `https://api.coronium.io/mcp` runs the `directory` profile (22 tools). Permissions: `read` (account, balance, proxies, plans, prices, tickets) and `manage` (test, rotate and replace proxies, OpenVPN profiles, open and answer tickets). It has no tools that buy, renew, top up, cancel or refund, whatever you approve.
+- `https://api.coronium.io/mcp/buyer` is a separate address for agents that buy, for use as a custom connector. It runs the `buyer` profile: 15 tools, or 20 when the connection may spend (the two buy tools, the two renew tools and `convert_crypto_to_credit`). Purchases are off for every OAuth connection: the money tools appear only after you allow purchases for that one connection, on the consent page or later in the dashboard, with your password. Each purchase still needs `confirm: true`, the quoted `expected_total_usd` and a new `idempotency_key`, and the API refuses a higher total.
 - See and disconnect connected apps at https://dashboard.coronium.io/api/v1/oauth/connections while signed in to the dashboard. Disconnecting stops an app at once.
 - API clients can also send a dashboard API token as the Bearer token. On `/mcp` it gets `read` and `manage` and never spends. On `/mcp/buyer` it also gets `spend`, the same power it has on the REST API, so the money tools are listed without a dashboard switch. Keep it secret. `coronium_get_capabilities` reports the rule as `spending_rule`.
+- The hosted server never lists `create_account`. Open the account first with the local server or the REST API (see [Agents without a browser](#agents-without-a-browser)), then connect with its API token.
 - The hosted server keeps no customer data. Its logs hold the tool name and argument names, never values, credentials or ticket text.
 
-Run your own copy over HTTP with `npx -y -p coronium-proxy-mcp@2.4.1 coronium-proxy-mcp-http` behind a TLS proxy. It needs an OAuth authorization server that answers the token check described in `src/remote-auth.ts`; settings: `PORT` (default 5031), `HOST` (default 127.0.0.1), `MCP_PUBLIC_URL`, `MCP_ALLOWED_HOSTS`, `MCP_ALLOWED_ORIGINS` and `CORONIUM_BASE_URL`. It refuses to start with `CORONIUM_API_TOKEN`, a password or `CORONIUM_ENABLE_SPENDING` in its environment, because it only acts with each caller's own sign-in.
+Run your own copy over HTTP with `npx -y -p coronium-proxy-mcp@2.4.2 coronium-proxy-mcp-http` behind a TLS proxy. It needs an OAuth authorization server that answers the token check described in `src/remote-auth.ts`; settings: `PORT` (default 5031), `HOST` (default 127.0.0.1), `MCP_PUBLIC_URL`, `MCP_ALLOWED_HOSTS`, `MCP_ALLOWED_ORIGINS` and `CORONIUM_BASE_URL`. It refuses to start with `CORONIUM_API_TOKEN`, a password or `CORONIUM_ENABLE_SPENDING` in its environment, because it only acts with each caller's own sign-in.
 
 ## Install from a listing
 
@@ -149,8 +150,8 @@ Run your own copy over HTTP with `npx -y -p coronium-proxy-mcp@2.4.1 coronium-pr
   /plugin install coronium-mobile-proxies@coronium
   ```
   Then run `/mcp`, select `plugin:coronium-mobile-proxies:coronium` and choose Authenticate. Details: [plugins/coronium-mobile-proxies](plugins/coronium-mobile-proxies#readme).
-- **Official MCP Registry**: `io.github.coroniumio/coronium-proxy-mcp` ([registry entry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.coroniumio/coronium-proxy-mcp)). Hosts that read the registry install the npm package `coronium-proxy-mcp`.
-- **npm**: `npx -y coronium-proxy-mcp@2.4.1` with the environment shown under [Connect](#connect).
+- **Official MCP Registry**: `io.github.coroniumio/coronium-proxy-mcp` ([registry entry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.coroniumio/coronium-proxy-mcp)). Hosts that read the registry install the npm package `coronium-proxy-mcp` or connect to the hosted remote `https://api.coronium.io/mcp`.
+- **npm**: `npx -y coronium-proxy-mcp@2.4.2` with the environment shown under [Connect](#connect).
 - **Glama**: [glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp](https://glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp).
 
 ## Tool profiles
@@ -158,9 +159,9 @@ Run your own copy over HTTP with `npx -y -p coronium-proxy-mcp@2.4.1 coronium-pr
 `CORONIUM_TOOL_PROFILE` decides which tools exist:
 
 - `directory` registers an explicit allowlist of 22 tools: balances (account credit, BTC and USDT), owned proxies with HTTP and SOCKS5 URLs, ready-to-use connection config (`get_proxy_connection`), health, connectivity test, rotation and its status, replacement, OpenVPN profile, countries, plans and stock by country and carrier, renewal quotes, tickets (list, read, create, reply), webhook read, and capabilities. It has no login tool, no OS fingerprint tools, no wallet creation, and no buy, renew, top-up or cancel tools. `check_token` takes no token argument. This is the profile the Coronium Claude Code plugin uses.
-- `buyer` registers 15 tools for an agent that buys and runs a few dedicated proxies, 20 with spending on: plans, stock, `quote_purchase`, `get_renewal_quote`, payment status, owned proxies, `get_proxy_connection`, test, rotate and rotation status, replace, balance, crypto balance, saved cards and capabilities. With spending on it adds `buy_modems_with_balance`, `buy_modems_with_card`, `renew_modems_with_balance`, `renew_modems_with_card` and `convert_crypto_to_credit`. Without any configured token or login it also lists `create_account` (see [Agents without a browser](#agents-without-a-browser)). No login tool and no token argument anywhere.
-- `full` (the default when unset) registers every non-money tool, including settings, webhooks, pool keys and the Coronium Node tools. The login tool is not included unless `CORONIUM_ENABLE_LOGIN_TOOL=1`.
-- `read-only` registers only tools that change nothing. `CORONIUM_READ_ONLY=true` is an alias.
+- `buyer` registers 15 tools for an agent that buys and runs a few dedicated proxies, 20 with spending on: plans, stock, `quote_purchase`, `get_renewal_quote`, payment status, owned proxies, `get_proxy_connection`, test, rotate and rotation status, replace, balance, crypto balance, saved cards and capabilities. With spending on it adds `buy_modems_with_balance`, `buy_modems_with_card`, `renew_modems_with_balance`, `renew_modems_with_card` and `convert_crypto_to_credit`. Without any configured token or login it also lists `create_account` (16 tools, 21 with spending on; see [Agents without a browser](#agents-without-a-browser)). No login tool and no token argument anywhere.
+- `full` (the default when unset) registers every non-money tool, including settings, webhooks, pool keys and the Coronium Node tools: 60 tools, 69 with spending on. Like `buyer`, it also lists `create_account` while no token or login is configured (61, or 70 with spending on). The login tool is not included unless `CORONIUM_ENABLE_LOGIN_TOOL=1`.
+- `read-only` registers only the 32 tools that change nothing. `CORONIUM_READ_ONLY=true` is an alias.
 
 **Spending is off by default.** Money tools exist only when `CORONIUM_ENABLE_SPENDING=1` is set **and** the profile is `full` (buy, renew, crypto to credit, pool purchase and top-up, cancel with refund) or `buyer` (buy, renew and crypto to credit). Without both, they are not registered and the HTTP client refuses money calls on its own (`spending_disabled`). Otherwise you pay in the dashboard.
 
@@ -168,7 +169,7 @@ Tools are always listed in alphabetical order, so the list is the same in every 
 
 ### Configuration
 
-- `CORONIUM_API_TOKEN` (or `CORONIUM_API_KEY`): the dashboard API token, kept in memory only.
+- `CORONIUM_API_TOKEN` (or `CORONIUM_API_KEY`): the dashboard API token, kept in memory only. Leave it unset in the `buyer` or `full` profile to let an agent open its own account with `create_account`.
 - `CORONIUM_TOOL_PROFILE`: `buyer`, `directory`, `full` or `read-only`. Any other value stops the server at startup.
 - `CORONIUM_ENABLE_SPENDING`: `1` or `true` enables money tools in the `full` and `buyer` profiles. Default off.
 - `CORONIUM_ENABLE_LOGIN_TOOL`: `1` or `true` registers `coronium_login` and `coronium_logout` in the `full` and `read-only` profiles. Default off. Never in `buyer` or `directory`.
@@ -206,7 +207,7 @@ A `rotation_cooldown` error carries `retry_after_seconds`; wait that long. Anyon
 
 ### Funding, as it works today
 
-- A person adds account credit or a card in the dashboard at dashboard.coronium.io.
+- A person adds account credit or a card in the dashboard at dashboard.coronium.io. Cards cannot be added through the API or this MCP. An agent can fund the account itself with its own crypto (below).
 - Saved card: `get_credit_cards` lists saved cards (brand, last4, expiry). Pass a card's `_id` as `card_id` to `buy_modems_with_card` or `renew_modems_with_card`. If the bank asks the cardholder to authenticate (`card_authentication_required`) or declines (`card_declined`), nothing was charged; the person pays in the dashboard or picks another card. The tool never retries.
 - Own crypto: `get_crypto_balance` returns the USDT (TRC-20) and BTC deposit addresses. After a deposit confirms, `convert_crypto_to_credit` moves it into USD account credit (one way): first with `dry_run: true` to preview, then, after a yes, with `confirm: true` and a new `idempotency_key`. Then buy or renew with `funding_source: "account_credit"`. A confirmed BTC balance can also pay directly with `funding_source: "btc"`. `get_crypto_balance` is marked as a write, not a read: the backend creates a missing deposit wallet on that call. For a pure balance read use `get_balance`.
 - Want to try the service first? Buy one paid 1-day plan.
@@ -239,7 +240,7 @@ Errors set `isError:true` and carry `{error}` as JSON text (not `structuredConte
 
 ## Tool catalog
 
-Every name begins with `coronium_`. "buyer" and "directory" mark the tools in those profiles. Exact arguments come from `tools/list`.
+Every name begins with `coronium_`. "buyer" and "directory" mark the tools in those profiles. Exact arguments come from `tools/list`. The catalog lists all 72 tool schemas (also in `docs/tool-catalog.json`): 70 tools plus the opt-in `coronium_login` and `coronium_logout`. Of the 70, nine move money and need `CORONIUM_ENABLE_SPENDING=1`.
 
 <!-- TOOL_CATALOG -->
 - `coronium_apply_modem_settings` (write). Required: `proxy`, `confirm`.

@@ -16,7 +16,7 @@ Pick one. The hosted server needs nothing installed.
 | claude.ai, Claude desktop/mobile, Cowork | Add a custom connector with the URL `https://api.coronium.io/mcp`, then sign in with the Coronium account and approve. |
 | Claude Code (hosted) | `claude mcp add --transport http coronium https://api.coronium.io/mcp`, then `/mcp` to sign in. |
 | Claude Code (plugin) | `/plugin marketplace add coroniumio/coronium-proxy-mcp`, then `/plugin install coronium-mobile-proxies@coronium`. |
-| Any MCP host (local) | `npx -y coronium-proxy-mcp@2.4.1` with `CORONIUM_API_TOKEN` and `CORONIUM_TOOL_PROFILE` set (Node.js 20+). |
+| Any MCP host (local) | `npx -y coronium-proxy-mcp@2.4.2` with `CORONIUM_API_TOKEN` and `CORONIUM_TOOL_PROFILE` set (Node.js 20+). |
 | Agent with an API token, no browser | Hosted `https://api.coronium.io/mcp/buyer` with the header `Authorization: Bearer <api token>`. Claude Code: `claude mcp add --transport http coronium-buyer https://api.coronium.io/mcp/buyer --header "Authorization: Bearer $CORONIUM_API_TOKEN"`. |
 
 - **No account yet (agents without a browser).** Run the local server with the `buyer` profile and no token: `coronium_create_account` (email, name, optional purpose and password) signs up, signs in and issues an API token that the session then uses. It returns the token once, and a generated password once; store them in a secret store. Over REST the same is `POST /api/v3/signup`, `POST /api/v3/get-token`, then `GET /api/v1/account/api-token` with the session token. Disposable and reserved email domains are refused; `account_exists` means the address already has an account. A new account is empty: nothing is included until paid. Full curl walk-through: README, "Agents without a browser".
@@ -27,12 +27,12 @@ Pick one. The hosted server needs nothing installed.
 
 | Profile | For | Money tools |
 |---|---|---|
-| `directory` (hosted `/mcp`, the plugin) | Check and manage owned proxies, plans, stock, quotes, tickets | Never |
-| `buyer` (hosted `/mcp/buyer`, or local with `CORONIUM_ENABLE_SPENDING=1`) | An agent that buys and runs a few proxies | Buy and renew by balance or saved card, crypto to credit, only when spending is on |
-| `full` (local default) | Everything that is not money, plus money tools with spending on | Buy, renew, crypto to credit, pool, top-up, cancel with refund, only with spending on |
-| `read-only` | Look only | Never |
+| `directory` (hosted `/mcp`, the plugin) | Check and manage owned proxies, plans, stock, quotes, tickets (22 tools) | Never |
+| `buyer` (hosted `/mcp/buyer`, or local `CORONIUM_TOOL_PROFILE=buyer`) | An agent that buys and runs a few proxies (15 tools, 20 with spending on) | Buy and renew by balance or saved card, crypto to credit, only when spending is on (local `CORONIUM_ENABLE_SPENDING=1`) |
+| `full` (local default) | Everything that is not money, plus money tools with spending on (60 tools, 69 with spending on) | Buy, renew, crypto to credit, pool, top-up, cancel with refund, only with spending on |
+| `read-only` | Look only (32 tools) | Never |
 
-On the hosted `/mcp/buyer`, an OAuth connection shows the money tools only after the person allows purchases for that one connection in the dashboard, with their password. A dashboard API token sent as `Authorization: Bearer` spends there directly, as it does on the REST API, so it must stay secret. `/mcp` never spends. If a tool you need is missing, say which profile or setting provides it. Do not look for a workaround.
+Without a token or login, the local `buyer` and `full` profiles also list `create_account`; the hosted server never does. On the hosted `/mcp/buyer`, an OAuth connection shows the money tools only after the person allows purchases for that one connection in the dashboard, with their password. A dashboard API token sent as `Authorization: Bearer` spends there directly, as it does on the REST API, so it must stay secret. `/mcp` never spends. If a tool you need is missing, say which profile or setting provides it. Do not look for a workaround.
 
 ## 3. Everyday tasks
 

@@ -2,27 +2,27 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.coroniumio/coronium-proxy-mcp",
   "title": "Coronium mobile proxies",
-  "description": "Manage your Coronium 4G/5G mobile proxies: test, rotate, replace, plans, stock and quotes.",
+  "description": "Buy and manage Coronium 4G/5G mobile proxies: plans, stock, quotes, test, rotate and replace.",
   "repository": {
     "url": "https://github.com/coroniumio/coronium-proxy-mcp",
     "source": "github"
   },
   "websiteUrl": "https://www.coronium.io",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "coronium-proxy-mcp",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
           "name": "CORONIUM_API_TOKEN",
-          "description": "Dashboard API token from dashboard.coronium.io, Account, API Access.",
-          "isRequired": true,
+          "description": "Dashboard API token from dashboard.coronium.io, Account, API Access. Optional: without it, the buyer and full profiles offer coronium_create_account, so an agent can open its own account.",
+          "isRequired": false,
           "isSecret": true,
           "format": "string"
         },
@@ -40,7 +40,7 @@
         },
         {
           "name": "CORONIUM_ENABLE_SPENDING",
-          "description": "Set to 1 to allow buying from the account balance. Off unless set.",
+          "description": "Set to 1 to add the money tools to the buyer and full profiles: buy and renew (account credit, BTC or a saved card) and crypto to credit; full also adds pool purchases and cancel with refund. Off unless set.",
           "isRequired": false,
           "format": "boolean"
         }
