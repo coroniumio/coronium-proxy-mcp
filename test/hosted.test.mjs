@@ -232,10 +232,36 @@ test('context isolation: concurrent requests with different tokens never cross',
     for (const request of requests.filter(item => item.path === '/account')) assert(sessions.has(request.auth));
 });
 
-test('a raw dashboard API token works for API clients but can never spend', async () => {
-    const names = await toolNames('/mcp/buyer', API_TOKEN);
-    assert(!names.some(name => MONEY.test(name)));
-    assert((await toolNames('/mcp', API_TOKEN)).includes('coronium_rotate_modem'));
+test('a dashboard API token spends on /mcp/buyer as it does on REST, and never on /mcp', async () => {
+    assert.deepEqual((await toolNames('/mcp/buyer', API_TOKEN)).sort(), [...buyerSpendingTools].sort());
+    const directory = await toolNames('/mcp', API_TOKEN);
+    assert.deepEqual(directory.sort(), [...directoryTools].sort());
+    assert(!directory.some(name => MONEY.test(name)));
+    const client = await connect('/mcp/buyer', API_TOKEN);
+    try {
+        const key = randomUUID();
+        const bought = await client.callTool({name: 'coronium_buy_modems_with_balance', arguments: {tariff_id: ids.tariff, quantity: 1, funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: key}});
+        assert.notEqual(bought.isError, true, JSON.stringify(bought));
+        const payment = requests.filter(request => request.path === '/payment/buy-with-account-credit');
+        assert.equal(payment.length, 1);
+        assert.equal(payment[0].auth, API_TOKEN);
+        const capabilities = JSON.parse((await client.callTool({name: 'coronium_get_capabilities', arguments: {}})).content[0].text).data;
+        assert.equal(capabilities.auth, 'dashboard_api_token');
+        assert.deepEqual(capabilities.scopes, ['read', 'manage', 'spend']);
+        assert.equal(capabilities.spending_enabled, true);
+        assert.match(capabilities.spending_rule, /keep it secret/);
+        assert(!JSON.stringify(capabilities).includes(API_TOKEN));
+    } finally {
+        await client.close();
+    }
+    const directoryClient = await connect('/mcp', API_TOKEN);
+    try {
+        const capabilities = JSON.parse((await directoryClient.callTool({name: 'coronium_get_capabilities', arguments: {}})).content[0].text).data;
+        assert.deepEqual(capabilities.scopes, ['read', 'manage']);
+        assert.equal(capabilities.spending_enabled, false);
+    } finally {
+        await directoryClient.close();
+    }
 });
 
 test('an unreachable API is a 503, never a 401 that would force a new sign-in', async () => {

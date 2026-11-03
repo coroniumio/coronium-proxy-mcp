@@ -107,10 +107,12 @@ export class BearerVerifier {
         const response = await this.get("/account", token);
         if (!response || response.status >= 500 || response.status === 429) return {ok: false, reason: "upstream_unavailable"};
         if (response.status !== 200) return {ok: false, reason: "invalid_token"};
-        // A raw API token has no per-connection spending switch, so it never spends here.
+        // A dashboard API token can already buy through the REST API, so it gets the same
+        // power here. The hosted server narrows scopes to the resource: only /mcp/buyer
+        // keeps spend; /mcp never registers money tools whatever the token holds.
         return {ok: true, bearer: {
             auth: "api_token", connectionId: `api:${key.slice(0, 32)}`, resource: null,
-            scopes: ["read", "manage"], spendingEnabled: false, expiresAt: this.now() + CACHE_TTL_MS,
+            scopes: ["read", "manage", "spend"], spendingEnabled: true, expiresAt: this.now() + CACHE_TTL_MS,
         }};
     }
 }

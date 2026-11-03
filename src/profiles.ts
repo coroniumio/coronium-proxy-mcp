@@ -40,9 +40,11 @@ export const DIRECTORY_TOOLS: ReadonlySet<string> = new Set([
 // The buyer profile is the short path for an agent that buys and runs a few
 // dedicated proxies: catalog, quote, buy, payment status, the proxies it owns
 // and the everyday fixes. Same rule as the directory list: explicit names only.
-// The money tools are listed here but still need CORONIUM_ENABLE_SPENDING.
+// The money tools are listed here but still need CORONIUM_ENABLE_SPENDING, and
+// coronium_create_account appears only while no token or login is configured.
 export const BUYER_TOOLS: ReadonlySet<string> = new Set([
     "coronium_get_capabilities",
+    "coronium_create_account",
     "coronium_list_tariffs",
     "coronium_list_free_modems",
     "coronium_quote_purchase",

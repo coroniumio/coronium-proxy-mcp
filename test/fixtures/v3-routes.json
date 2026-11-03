@@ -3633,6 +3633,45 @@
           ]
         }
       ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/account/api-token",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "token",
+            "baseUrl",
+            "usage",
+            "expiresIn",
+            "issuedAt",
+            "expiresAt"
+          ]
+        },
+        {
+          "status": 401,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
     }
   ]
 }

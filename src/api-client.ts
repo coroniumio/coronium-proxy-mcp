@@ -22,6 +22,8 @@ export interface RequestOptions {
     idempotencyKey?: string;
     receipt?: boolean;
     catalog?: boolean;
+    // The path is under /api/v1 on the same host instead of /api/v3.
+    v1?: boolean;
     // Restart and rotate-by-token: a 429 is a rotation cooldown.
     rotation?: boolean;
     // Diagnostic routes answer HTTP 200 with an error string for a failed test.
@@ -124,7 +126,7 @@ export function assertSpendingAllowed(): void {
     if (currentContext()) {
         throw new CoroniumError({
             code: "spending_disabled",
-            message: "Purchases are turned off for this connection. The account owner can turn them on at https://dashboard.coronium.io/api/v1/oauth/connections for a connection made to the buyer address. Use https://dashboard.coronium.io to pay.",
+            message: "Purchases are turned off for this connection. Purchases work only on https://api.coronium.io/mcp/buyer: an OAuth connection needs the account owner to turn purchases on at https://dashboard.coronium.io/api/v1/oauth/connections, and a dashboard API token sent as Authorization: Bearer can buy there directly. Use https://dashboard.coronium.io to pay.",
             suggested_action: "use_dashboard",
         });
     }
@@ -199,7 +201,7 @@ export class CoroniumAPI {
         if (config.readOnly && mutates) throw new CoroniumError({code: "read_only", message: "This MCP is configured for read-only access."});
         // Paths are code-owned; dynamic segments must be URL-encoded by callers.
         if (!path.startsWith("/") || path.startsWith("//") || path.includes("..")) throw new Error("Invalid API path.");
-        const url = options.catalog ? config.catalogUrl : config.baseUrl + path;
+        const url = options.catalog ? config.catalogUrl : (options.v1 ? config.apiV1Url : config.baseUrl) + path;
         let token = options.public ? undefined : (options.token || await this.authenticate());
         for (let attempt = 0; attempt < 2; attempt++) {
             let response: AxiosResponse<string>;

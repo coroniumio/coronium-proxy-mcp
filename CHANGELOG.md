@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.4.1 - 2026-11-03
+
+Agents can open their own account. Profile counts are unchanged (buyer adds `coronium_create_account` only while no credentials are configured).
+
+### Added
+
+- `coronium_create_account` (local stdio server, full and buyer profiles, only while no API token or login is configured): signs up with email, name, optional purpose and optional password (else a strong one is generated), signs in, issues a dashboard API token and uses it for the rest of the session (encrypted file with `TOKEN_ENCRYPTION_KEY`, else memory). Returns the API token once, the generated password once, the hosted buyer address and header, and the deposit, convert, quote and buy steps. Errors: `email_domain_refused`, `invalid_email`, `signup_refused`, `account_exists`, `already_authenticated`. Marked destructive (it creates an account). Never in the directory profile or the hosted server.
+- README "Agents without a browser": curl walk-through (signup, sign-in, API token, deposit address, convert, plans, buy) and MCP client configuration with `Authorization: Bearer` against `/mcp/buyer`.
+
+### Changed
+
+- Hosted: a dashboard API token (kind `api`) sent to `https://api.coronium.io/mcp/buyer` now gets `read`, `manage` and `spend`, so it can buy there exactly as it already can on the REST API. On `https://api.coronium.io/mcp` it keeps `read` and `manage` and no money tool is ever registered. OAuth connections are unchanged: they still need the purchases switch for that connection.
+- Hosted `coronium_get_capabilities` adds `spending_rule`, and the `spending_disabled` message explains both ways to buy on `/mcp/buyer`.
+
 ## 2.4.0 - 2026-11-03
 
 Agent purchasing and connection setup. Profile counts: directory 22, buyer 15 or 20 with spending on, read-only 32, full 60 or 69 with spending on.

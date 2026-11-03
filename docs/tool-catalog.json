@@ -1,5 +1,5 @@
 {
-  "version": "2.4.0",
+  "version": "2.4.1",
   "tools": [
     {
       "name": "coronium_apply_modem_settings",
@@ -993,6 +993,71 @@
       },
       "annotations": {
         "title": "Convert crypto to credit",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "coronium_create_account",
+      "title": "Create account",
+      "description": "Create a new Coronium account for this agent, with no browser, then sign this MCP in to it. Only present while no API token or login is configured. Calls signup, signs in and issues a dashboard API token, which the rest of this session uses. Returns the API token once (for the hosted buyer server https://api.coronium.io/mcp/buyer with Authorization: Bearer, or REST) and the generated password once if none was given. The account starts empty: fund it (deposit USDT or BTC, convert to credit) and buy; nothing is included until paid. Use a real email the user controls; disposable and reserved domains are refused. Get the user's yes first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 255
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "What the proxies are for, in a sentence."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "description": "Omit to generate a strong one, returned once."
+          }
+        },
+        "required": [
+          "email",
+          "name"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "observed_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "observed_at"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Create account",
         "readOnlyHint": false,
         "destructiveHint": true,
         "idempotentHint": false,

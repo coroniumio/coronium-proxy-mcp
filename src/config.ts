@@ -56,6 +56,7 @@ const apiBase: string = resolveBaseUrl(process.env.CORONIUM_BASE_URL);
 export interface Config {
     baseUrl: string;
     catalogUrl: string;
+    apiV1Url: string;
     login: string | undefined;
     password: string | undefined;
     apiToken: string | undefined;
@@ -76,6 +77,8 @@ const baseConfig: Config = {
     baseUrl: apiBase,
     // Existing public catalog, used only to discover pool tariffs. No credentials are sent.
     catalogUrl: new URL("/api/v1/tariffs", apiBase).href,
+    // Same host, /api/v1: only the account API-token route used by account creation.
+    apiV1Url: new URL("/api/v1", apiBase).href,
     login: process.env.CORONIUM_LOGIN || process.env.CORONIUM_EMAIL,
     password: process.env.CORONIUM_PASSWORD,
     apiToken: process.env.CORONIUM_API_TOKEN || process.env.CORONIUM_API_KEY,

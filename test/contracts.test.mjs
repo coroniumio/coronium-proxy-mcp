@@ -628,7 +628,8 @@ test('each profile registers exactly its checked-in tool list', async () => {
     assert.deepEqual(await toolNames('buyer', false), expectedProfile('buyer'));
     assert.deepEqual(await toolNames('buyer', true), expectedProfile('buyer-spending'));
     assert.deepEqual(expectedProfile('directory'), [...DIRECTORY_TOOLS].sort());
-    assert.deepEqual(expectedProfile('buyer-spending'), [...BUYER_TOOLS].sort());
+    // coronium_create_account is listed for buyer but only registers without credentials.
+    assert.deepEqual(expectedProfile('buyer-spending'), [...BUYER_TOOLS].filter(name => name !== 'coronium_create_account').sort());
 });
 
 // ---- 2.2.0: login opt-in, buyer profile, stable order, recovery hints, exact-total check ----
@@ -1145,6 +1146,71 @@ test('2.4.0 get_proxy_connection is in every profile; card and conversion tools 
         const names = await toolNames(profile, true);
         for (const name of ['coronium_buy_modems_with_card', 'coronium_renew_modems_with_card', 'coronium_convert_crypto_to_credit']) assert(names.includes(name), `${profile} ${name}`);
     }
+});
+
+// ---- 2.4.1: account creation without a browser ----
+
+async function withoutCredentials(action) {
+    config.apiToken = undefined; tokenStore.clear();
+    try { return await action(); } finally { config.apiToken = 'fixture-token'; }
+}
+const SESSION = 'session.fixture.jwt';
+const API_JWT = 'api.fixture.jwt';
+function signupBackend({signup = (_, res) => json(res, {result: 'ok'}), getToken = (_, res) => json(res, {token: SESSION})} = {}) {
+    overrides.set('POST /signup', signup);
+    overrides.set('POST /get-token', getToken);
+    overrides.set('GET /api/v1/account/api-token', (req, res) => json(res, req.headers.authorization === `Bearer ${SESSION}`
+        ? {token: API_JWT, baseUrl: 'https://api.coronium.io/api/v3', usage: 'Authorization: Bearer <token>', expiresIn: '365d', issuedAt: 1, expiresAt: 2}
+        : {error: 'Not authenticated'}, req.headers.authorization === `Bearer ${SESSION}` ? 200 : 401));
+}
+
+test('2.4.1 create_account registers only in full and buyer, only without credentials, and is destructive', async () => {
+    assert(!(await toolNames('full', true)).includes('coronium_create_account'));
+    await withoutCredentials(async () => {
+        for (const profile of ['full', 'buyer']) {
+            config.profile = profile; config.readOnly = false;
+            const tool = (await (await connect()).listTools()).tools.find(entry => entry.name === 'coronium_create_account');
+            assert(tool, profile);
+            assert.equal(tool.annotations.destructiveHint, true);
+            assert.deepEqual(tool.inputSchema.required.sort(), ['email', 'name']);
+        }
+        for (const profile of ['directory', 'read-only']) assert(!(await toolNames(profile, true)).includes('coronium_create_account'), profile);
+    });
+});
+
+test('2.4.1 create_account: signup, sign-in and API token, then the session uses that token; secrets are returned once', async () => {
+    signupBackend();
+    const client = await withoutCredentials(() => connect());
+    const created = data(await call('create_account', {email: 'Agent@Example.com', name: 'Fixture Agent', purpose: 'price monitoring'}, client));
+    assert.deepEqual(last('/signup').body, {login: 'agent@example.com', password: created.generated_password, name: 'Fixture Agent', purpose: 'price monitoring'});
+    assert.equal(last('/signup').headers.authorization, undefined);
+    assert.deepEqual(last('/get-token').body, {login: 'agent@example.com', password: created.generated_password});
+    assert.equal(last('/api/v1/account/api-token').headers.authorization, `Bearer ${SESSION}`);
+    assert.equal(created.api_token, API_JWT);
+    assert.equal(created.generated_password.length, 24);
+    assert.equal(created.hosted_mcp.url, 'https://api.coronium.io/mcp/buyer');
+    assert.match(created.next_steps.join(' '), /get_crypto_balance.*convert_crypto_to_credit.*quote_purchase.*buy_modems_with_balance/);
+    assert.doesNotMatch(JSON.stringify(created), /\bfree\b|\btrials?\b/i);
+    data(await call('get_balance', {}, client));
+    assert.equal(last('/account').headers.authorization, `Bearer ${API_JWT}`);
+    error(await call('create_account', {email: 'second@example.com', name: 'Again'}, client), 'already_authenticated');
+    assert.equal(requests.filter(request => request.path === '/signup').length, 1);
+    const own = data(await withoutCredentials(async () => call('create_account', {email: 'own@example.com', name: 'Own', password: 'own-password-1'})));
+    assert.equal(own.generated_password, null);
+    assert.equal(last('/signup').body.password, 'own-password-1');
+});
+
+test('2.4.1 create_account: a refused domain and an existing address are clear errors and leave the session signed out', async () => {
+    signupBackend({signup: (_, res) => json(res, {error: 'This email domain is not allowed for registration.'}, 400)});
+    const refused = error(await withoutCredentials(() => call('create_account', {email: 'x@mailinator.com', name: 'X'})), 'email_domain_refused');
+    assert.match(refused.recovery_hint, /No account was created/);
+    assert(!last('/get-token'));
+    signupBackend({getToken: (_, res) => json(res, {error: 'Not authenticated'}, 401)});
+    const taken = error(await withoutCredentials(() => call('create_account', {email: 'taken@example.com', name: 'T', password: 'not-their-password'})), 'account_exists');
+    assert.match(taken.recovery_hint, /CORONIUM_API_TOKEN/);
+    assert(!last('/api/v1/account/api-token'));
+    assert.equal(tokenStore.get(), undefined);
+    error(await withoutCredentials(() => call('create_account', {email: 'not-an-email', name: 'T'})));
 });
 
 // Runs last: every request any tool made in this file maps to a fixture route.

@@ -16,9 +16,11 @@ Pick one. The hosted server needs nothing installed.
 | claude.ai, Claude desktop/mobile, Cowork | Add a custom connector with the URL `https://api.coronium.io/mcp`, then sign in with the Coronium account and approve. |
 | Claude Code (hosted) | `claude mcp add --transport http coronium https://api.coronium.io/mcp`, then `/mcp` to sign in. |
 | Claude Code (plugin) | `/plugin marketplace add coroniumio/coronium-proxy-mcp`, then `/plugin install coronium-mobile-proxies@coronium`. |
-| Any MCP host (local) | `npx -y coronium-proxy-mcp@2.3.0` with `CORONIUM_API_TOKEN` and `CORONIUM_TOOL_PROFILE` set (Node.js 20+). |
+| Any MCP host (local) | `npx -y coronium-proxy-mcp@2.4.1` with `CORONIUM_API_TOKEN` and `CORONIUM_TOOL_PROFILE` set (Node.js 20+). |
+| Agent with an API token, no browser | Hosted `https://api.coronium.io/mcp/buyer` with the header `Authorization: Bearer <api token>`. Claude Code: `claude mcp add --transport http coronium-buyer https://api.coronium.io/mcp/buyer --header "Authorization: Bearer $CORONIUM_API_TOKEN"`. |
 
-- The API token comes from dashboard.coronium.io, Account, API Access. Keep it in the host's secret store. Never ask the person to paste it into the conversation.
+- **No account yet (agents without a browser).** Run the local server with the `buyer` profile and no token: `coronium_create_account` (email, name, optional purpose and password) signs up, signs in and issues an API token that the session then uses. It returns the token once, and a generated password once; store them in a secret store. Over REST the same is `POST /api/v3/signup`, `POST /api/v3/get-token`, then `GET /api/v1/account/api-token` with the session token. Disposable and reserved email domains are refused; `account_exists` means the address already has an account. A new account is empty: nothing is included until paid. Full curl walk-through: README, "Agents without a browser".
+- The API token comes from dashboard.coronium.io, Account, API Access, or from `coronium_create_account`. Keep it in the host's secret store. Never ask the person to paste it into the conversation.
 - Set the host's tool timeout above 180 seconds. Rotation, replacement and payments wait for the backend. If a call times out, check the outcome before acting again.
 
 ## 2. Profiles: which tools exist
@@ -30,7 +32,7 @@ Pick one. The hosted server needs nothing installed.
 | `full` (local default) | Everything that is not money, plus money tools with spending on | Buy, renew, crypto to credit, pool, top-up, cancel with refund, only with spending on |
 | `read-only` | Look only | Never |
 
-On the hosted `/mcp/buyer`, the money tools appear only after the person allows purchases for that one connection in the dashboard, with their password. If a tool you need is missing, say which profile or setting provides it. Do not look for a workaround.
+On the hosted `/mcp/buyer`, an OAuth connection shows the money tools only after the person allows purchases for that one connection in the dashboard, with their password. A dashboard API token sent as `Authorization: Bearer` spends there directly, as it does on the REST API, so it must stay secret. `/mcp` never spends. If a tool you need is missing, say which profile or setting provides it. Do not look for a workaround.
 
 ## 3. Everyday tasks
 

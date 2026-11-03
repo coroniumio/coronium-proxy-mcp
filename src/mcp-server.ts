@@ -13,6 +13,7 @@ import {registerTicketTools} from "./tools/tickets.js";
 import {registerPoolTools} from "./tools/pool.js";
 
 const DASHBOARD_URL = "https://dashboard.coronium.io";
+const SPENDING_RULE = "Only https://api.coronium.io/mcp/buyer can spend. An OAuth connection spends after the account owner turns purchases on for it in the dashboard; a dashboard API token sent as Authorization: Bearer spends there directly, so keep it secret. https://api.coronium.io/mcp never spends.";
 
 const COMMON_GUIDE: readonly string[] = [
     "Read tools/list for current schemas. Results contain data and observed_at in both structuredContent and JSON text. Tool failures set isError:true and return {error} as JSON text: error.code (lowercase), message, recovery_hint (what to do next) and reconciliation details.",
@@ -77,7 +78,7 @@ function capabilities(): Record<string, unknown> {
     // Hosted connections describe their own transport, auth and scopes. Never the token.
     const transport = context
         ? {transport: context.transport, auth: context.auth === "oauth" ? "oauth" : "dashboard_api_token", scopes: [...context.scopes], resource: context.resource,
-            api_base_url: "https://api.coronium.io/api/v3"}
+            api_base_url: "https://api.coronium.io/api/v3", spending_rule: SPENDING_RULE}
         : {transport: "stdio", auth: "CORONIUM_API_TOKEN", api_base_url: config.baseUrl};
     return {
         version: SERVER_VERSION, ...transport, profile: config.profile, read_only: config.readOnly,

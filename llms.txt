@@ -1,6 +1,6 @@
 # Coronium proxy MCP
 
-> Local stdio MCP for customers of Coronium.io dedicated 4G/5G mobile proxies: balances, owned proxies with HTTP and SOCKS5 URLs, testing, rotation, replacement, OpenVPN, plans and stock, purchase and renewal quotes, support tickets, and buying from the account balance when the host turns spending on. Version 2.4.0. Requires Node 20+.
+> Local stdio MCP for customers of Coronium.io dedicated 4G/5G mobile proxies: balances, owned proxies with HTTP and SOCKS5 URLs, testing, rotation, replacement, OpenVPN, plans and stock, purchase and renewal quotes, support tickets, and buying from the account balance when the host turns spending on. Version 2.4.1. Requires Node 20+.
 
 - [Setup, profiles, behaviour and tool catalog](https://github.com/coroniumio/coronium-proxy-mcp/blob/main/README.md)
 - [Migration from 1.3.0](https://github.com/coroniumio/coronium-proxy-mcp/blob/main/CHANGELOG.md)
@@ -8,9 +8,10 @@
 - [Source](https://github.com/coroniumio/coronium-proxy-mcp)
 - [npm package](https://www.npmjs.com/package/coronium-proxy-mcp)
 
-Run the pinned package: npx -y coronium-proxy-mcp@2.4.0.
-Hosted server: https://api.coronium.io/mcp over Streamable HTTP with OAuth 2.1 sign-in through the Coronium account (claude.ai custom connector, Claude apps, Cowork, Claude Code). It runs the directory profile and never spends. https://api.coronium.io/mcp/buyer runs the buyer profile; its money tools appear only when the user turned purchases on for that connection.
-Authenticate with CORONIUM_API_TOKEN (dashboard API token, Account, API Access). CORONIUM_API_KEY is an alias. The password login tool exists only with CORONIUM_ENABLE_LOGIN_TOOL=1. Requests go to https://api.coronium.io/api/v3 unless CORONIUM_BASE_URL overrides it.
+Run the pinned package: npx -y coronium-proxy-mcp@2.4.1.
+Hosted server: https://api.coronium.io/mcp over Streamable HTTP with OAuth 2.1 sign-in through the Coronium account (claude.ai custom connector, Claude apps, Cowork, Claude Code). It runs the directory profile and never spends. https://api.coronium.io/mcp/buyer runs the buyer profile; for an OAuth connection its money tools appear only when the user turned purchases on for that connection, while a dashboard API token sent as Authorization: Bearer <token> can spend there directly (the same power it has on REST; keep it secret). /mcp never spends with any token.
+Agents without a browser: run the local server with CORONIUM_TOOL_PROFILE=buyer and no token, then coronium_create_account (email, name, optional purpose and password) signs up, signs in, issues an API token, uses it for the session and returns it once. Over REST: POST https://api.coronium.io/api/v3/signup {login, password, name, purpose?}, POST /api/v3/get-token {login, password} -> {token}, GET https://api.coronium.io/api/v1/account/api-token with Authorization: Bearer <session token> -> {token}. Disposable and reserved email domains are refused. A new account is empty; nothing is included until paid. Then deposit, convert to credit, quote and buy.
+Authenticate with CORONIUM_API_TOKEN (dashboard API token, Account, API Access, or from coronium_create_account). CORONIUM_API_KEY is an alias. The password login tool exists only with CORONIUM_ENABLE_LOGIN_TOOL=1. Requests go to https://api.coronium.io/api/v3 unless CORONIUM_BASE_URL overrides it.
 CORONIUM_TOOL_PROFILE: buyer (15 tools, 20 with spending on: plans, stock, quotes, buy and renew by balance or saved card, crypto to credit, payment status, proxies, connection config, test, rotate, replace, balances, cards), directory (22-tool allowlist, no money tools), full (default), read-only. Spending tools need CORONIUM_ENABLE_SPENDING=1 with the full or buyer profile; otherwise pay at https://dashboard.coronium.io. Tools are listed alphabetically.
 Discover exact schemas via tools/list. Read MCP resource coronium://guide. coronium_get_capabilities reports profile and spending state without network access.
 Success: structuredContent.data and observed_at, mirrored as JSON text. Error: isError:true with {error} as JSON text: a lowercase error.code, message, recovery_hint, and when known retry_after_seconds, request_id, outcome and backend_code.

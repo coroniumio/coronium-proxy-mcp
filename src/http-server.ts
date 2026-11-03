@@ -13,8 +13,9 @@ import {toolDefinitions} from "./tool.js";
 // connection's current scopes and spending switch, and no state crosses users.
 //
 //   /mcp        directory profile. Never registers money tools, whatever the token says.
-//   /mcp/buyer  buyer profile. Money tools only with scope `spend` AND the connection's
-//               spending switch on (set by the user in the dashboard, off by default).
+//   /mcp/buyer  buyer profile. Money tools only with scope `spend` AND, for an OAuth
+//               connection, its spending switch on (set by the user in the dashboard, off by
+//               default). A dashboard API token (kind "api") spends here as it does on REST.
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const DEFAULT_ORIGINS: readonly string[] = ["https://claude.ai", "https://claude.com"];
