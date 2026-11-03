@@ -1094,9 +1094,12 @@ test('2.4.0 crypto to credit: dry run first, then a confirmed move with a key; n
     assert.equal(moved.replay, false);
     assert.equal(data(await call('convert_crypto_to_credit', {confirm: true, idempotency_key: key})).replay, true);
     assert.equal(requests.filter(request => request.path === '/account/balance/convert').length, 1);
-    overrides.set('POST /account/balance/convert', (_, res) => json(res, {error: 'Nothing to move', code: 'NOTHING_TO_MOVE'}, 409));
-    const empty = error(await call('convert_crypto_to_credit', {coin: 'btc', confirm: true, idempotency_key: randomUUID()}), 'nothing_to_move');
+    overrides.set('POST /account/balance/convert', (_, res) => json(res, {error: 'No crypto balance of at least $1 to move. Nothing moved.', code: 'nothing_to_move'}, 409));
+    const empty = error(await call('convert_crypto_to_credit', {coin: 'all', confirm: true, idempotency_key: randomUUID()}), 'nothing_to_move');
     assert.match(empty.recovery_hint, /get_crypto_balance/);
+    overrides.set('POST /account/balance/convert', (_, res) => json(res, {data: {moved: [], refused: [{coin: 'btc', code: 'NOTHING_TO_MOVE', error: 'No BTC balance of at least $1 to move'}], account_credit_before: 0, account_credit_after: 0}}, 409));
+    const single = error(await call('convert_crypto_to_credit', {coin: 'btc', confirm: true, idempotency_key: randomUUID()}), 'http_409');
+    assert.equal(single.details.data.refused[0].code, 'NOTHING_TO_MOVE');
 });
 
 test('2.4.0 get_proxy_connection returns URLs, env vars and snippets from the account record only', async () => {

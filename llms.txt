@@ -1,6 +1,6 @@
 # Coronium proxy MCP
 
-> Local stdio MCP for customers of Coronium.io dedicated 4G/5G mobile proxies: balances, owned proxies with HTTP and SOCKS5 URLs, testing, rotation, replacement, OpenVPN, plans and stock, purchase and renewal quotes, support tickets, and buying and renewing from the account balance or a saved card (plus moving own USDT or BTC into account credit) when the host turns spending on. Without a token it can open a new account for an agent. Version 2.4.2. Requires Node 20+.
+> Local stdio MCP for customers of Coronium.io dedicated 4G/5G mobile proxies: balances, owned proxies with HTTP and SOCKS5 URLs, testing, rotation, replacement, OpenVPN, plans and stock, purchase and renewal quotes, support tickets, and buying and renewing from the account balance or a saved card (plus moving own USDT or BTC into account credit) when the host turns spending on. Without a token it can open a new account for an agent. Version 2.4.3. Requires Node 20+.
 
 - [Setup, profiles, behaviour and tool catalog](https://github.com/coroniumio/coronium-proxy-mcp/blob/main/README.md)
 - [Migration from 1.3.0](https://github.com/coroniumio/coronium-proxy-mcp/blob/main/CHANGELOG.md)
@@ -8,7 +8,7 @@
 - [Source](https://github.com/coroniumio/coronium-proxy-mcp)
 - [npm package](https://www.npmjs.com/package/coronium-proxy-mcp)
 
-Run the pinned package: npx -y coronium-proxy-mcp@2.4.2.
+Run the pinned package: npx -y coronium-proxy-mcp@2.4.3.
 Hosted server: https://api.coronium.io/mcp over Streamable HTTP with OAuth 2.1 sign-in through the Coronium account (claude.ai custom connector, Claude apps, Cowork, Claude Code). It runs the directory profile (22 tools) and never spends. https://api.coronium.io/mcp/buyer runs the buyer profile (15 tools, 20 when it may spend); for an OAuth connection its money tools appear only when the user turned purchases on for that connection, while a dashboard API token sent as Authorization: Bearer <token> can spend there directly (the same power it has on REST; keep it secret). /mcp never spends with any token. The hosted server never offers coronium_create_account.
 Agents without a browser: run the local server with CORONIUM_TOOL_PROFILE=buyer and no token (add CORONIUM_ENABLE_SPENDING=1 to buy), then coronium_create_account (email, name, optional purpose and password) signs up, signs in, issues an API token, uses it for the session and returns it once. Over REST: POST https://api.coronium.io/api/v3/signup {login, password, name, purpose?}, POST /api/v3/get-token {login, password} -> {token}, GET https://api.coronium.io/api/v1/account/api-token with Authorization: Bearer <session token> -> {token, expiresAt} (a dashboard API token, 365 days). Disposable and reserved email domains are refused. A verification email is sent; nothing waits for it. A new account is empty; nothing is included until paid. Then deposit, convert to credit, quote and buy.
 Authenticate with CORONIUM_API_TOKEN (dashboard API token, Account, API Access, or from coronium_create_account). CORONIUM_API_KEY is an alias. The password login tool exists only with CORONIUM_ENABLE_LOGIN_TOOL=1. Requests go to https://api.coronium.io/api/v3 unless CORONIUM_BASE_URL overrides it.

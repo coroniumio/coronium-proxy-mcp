@@ -26,7 +26,7 @@ startCommand:
   commandFunction: |-
     (config) => ({
       command: 'npx',
-      args: ['-y', 'coronium-proxy-mcp@2.4.2'],
+      args: ['-y', 'coronium-proxy-mcp@2.4.3'],
       env: {
         CORONIUM_API_TOKEN: config.coroniumApiToken,
         CORONIUM_TOOL_PROFILE: config.coroniumToolProfile || 'directory',

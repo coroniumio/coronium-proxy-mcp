@@ -1,5 +1,5 @@
 {
-  "version": "2.4.2",
+  "version": "2.4.3",
   "tools": [
     {
       "name": "coronium_apply_modem_settings",
@@ -935,7 +935,7 @@
     {
       "name": "coronium_convert_crypto_to_credit",
       "title": "Convert crypto to credit",
-      "description": "MOVES MONEY (one way). Move the account's own confirmed USDT and/or BTC wallet balance into USD account credit at the live rate, so it can buy or renew with funding_source account_credit. It cannot be moved back. First call with dry_run:true (changes nothing) and show the user the preview: coins, amounts, rate and USD credit. Only after a clear yes, call again without dry_run, with confirm:true and one new idempotency_key; a repeat call with the same key returns the first result with replay:true and never moves twice. nothing_to_move means the wallets hold less than $1: deposit first (coronium_get_crypto_balance shows the addresses) and wait for confirmation.",
+      "description": "MOVES MONEY (one way). Move the account's own confirmed USDT and/or BTC wallet balance into USD account credit (USDT at 1:1, BTC at the live BTC rate), so it can buy or renew with funding_source account_credit. It cannot be moved back. First call with dry_run:true (changes nothing) and show the user the preview: coins, amounts, rate and USD credit. Only after a clear yes, call again without dry_run, with confirm:true and one new idempotency_key; a repeat call with the same key returns the first result with replay:true and never moves twice. With coin all, error nothing_to_move means the wallets hold less than $1: deposit first (coronium_get_crypto_balance shows the addresses) and wait for confirmation. With a single coin, a coin that cannot move comes back as error http_409 with each coin's reason in details.data.refused (code NOTHING_TO_MOVE when under $1).",
       "inputSchema": {
         "type": "object",
         "properties": {

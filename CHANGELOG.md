@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.4.3 - 2026-11-03
+
+Description and docs corrections. No tool was added, removed or renamed; only the `coronium_convert_crypto_to_credit` description changed. Profile counts are unchanged: directory 22, buyer 15 or 20 with spending on, read-only 32, full 60 or 69 with spending on, plus `coronium_create_account` in the local buyer and full profiles while no token or login is set.
+
+### Changed
+
+- `coronium_convert_crypto_to_credit` description: USDT moves at 1:1 (1 USDT = 1 USD) and BTC at the live BTC rate. It said both moved "at the live rate". It also states what the agent sees when nothing can move: with `coin: "all"` the error code is `nothing_to_move`; with a single coin the API answers HTTP 409 with each coin's reason in `data.refused` (uppercase `NOTHING_TO_MOVE` when under $1), which the MCP reports as `http_409` with the body in `details`.
+- docs/backend-contract.md: the same rates (BTC rate at most 5 minutes old), and the v3 error envelope lowercases the top-level code to `nothing_to_move`; uppercase `NOTHING_TO_MOVE` appears only per coin in `data.refused[]`. It said HTTP 409 `NOTHING_TO_MOVE`.
+- README: the own-crypto paragraph states the two rates. The upgrade pointer names the real migration notes (Migration from 2.1.0 and Migration from 1.3.0); 2.0.0 was never published to npm.
+- Version pins in README, SKILL.md, llms.txt, AGENTS.md, smithery.yaml and server.json move to 2.4.3.
+
 ## 2.4.2 - 2026-11-03
 
 Docs and listing metadata only. No tool was added, removed, renamed or re-described: `tools/list` is the same as in 2.4.1 apart from the version. Profile counts: directory 22, buyer 15 or 20 with spending on, read-only 32, full 60 or 69 with spending on. Without a token or login, the local buyer and full profiles also list `coronium_create_account` (never on the hosted server). `docs/tool-catalog.json` holds all 72 tool schemas: 70 plus the opt-in `coronium_login` and `coronium_logout`.

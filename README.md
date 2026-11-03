@@ -1,8 +1,8 @@
 # Coronium proxy MCP
 
-A local **stdio MCP server** for customers of Coronium.io dedicated 4G/5G mobile proxies. Version 2.4.2. It lets an AI agent check balances, list owned proxies with ready-to-use HTTP and SOCKS5 URLs, test and rotate proxies, replace a proxy, download an OpenVPN profile, compare plans and live stock by country and carrier, quote a purchase or a renewal, and work with support tickets. If you turn spending on, it can also buy and renew from your account balance or a saved card, and move your own USDT or BTC into account credit, after you approve the exact total. Started without a token, it can open a new account for an agent (see [Agents without a browser](#agents-without-a-browser)).
+A local **stdio MCP server** for customers of Coronium.io dedicated 4G/5G mobile proxies. Version 2.4.3. It lets an AI agent check balances, list owned proxies with ready-to-use HTTP and SOCKS5 URLs, test and rotate proxies, replace a proxy, download an OpenVPN profile, compare plans and live stock by country and carrier, quote a purchase or a renewal, and work with support tickets. If you turn spending on, it can also buy and renew from your account balance or a saved card, and move your own USDT or BTC into account credit, after you approve the exact total. Started without a token, it can open a new account for an agent (see [Agents without a browser](#agents-without-a-browser)).
 
-It talks only to the Coronium customer API at `https://api.coronium.io/api/v3` (plus the public plan catalog on the same host). It has no admin, server or reseller-management tools. The same tools are also run by Coronium as a [hosted server](#hosted-server) at `https://api.coronium.io/mcp`, for claude.ai, the Claude apps and Cowork, with sign-in through your Coronium account. Upgrading from 1.3.0 or 2.0.0? Read the [migration notes](CHANGELOG.md).
+It talks only to the Coronium customer API at `https://api.coronium.io/api/v3` (plus the public plan catalog on the same host). It has no admin, server or reseller-management tools. The same tools are also run by Coronium as a [hosted server](#hosted-server) at `https://api.coronium.io/mcp`, for claude.ai, the Claude apps and Cowork, with sign-in through your Coronium account. Upgrading from 2.1.0 or 1.3.0? Read [Migration from 2.1.0](CHANGELOG.md#migration-from-210) or [Migration from 1.3.0](CHANGELOG.md#migration-from-130-and-the-unpublished-200) in the changelog (2.0.0 was never published to npm).
 
 ## Connect
 
@@ -13,7 +13,7 @@ Requires **Node.js 20 or newer**. Configure your MCP host to launch the pinned v
   "mcpServers": {
     "coronium": {
       "command": "npx",
-      "args": ["-y", "coronium-proxy-mcp@2.4.2"],
+      "args": ["-y", "coronium-proxy-mcp@2.4.3"],
       "env": {
         "CORONIUM_API_TOKEN": "YOUR_CORONIUM_API_TOKEN",
         "CORONIUM_TOOL_PROFILE": "directory"
@@ -34,7 +34,7 @@ If you want an agent to buy for you, use the `buyer` profile and turn spending o
   "mcpServers": {
     "coronium": {
       "command": "npx",
-      "args": ["-y", "coronium-proxy-mcp@2.4.2"],
+      "args": ["-y", "coronium-proxy-mcp@2.4.3"],
       "env": {
         "CORONIUM_API_TOKEN": "YOUR_CORONIUM_API_TOKEN",
         "CORONIUM_TOOL_PROFILE": "buyer",
@@ -60,7 +60,7 @@ An agent can open its own Coronium account, fund it and buy, with no browser and
   "mcpServers": {
     "coronium": {
       "command": "npx",
-      "args": ["-y", "coronium-proxy-mcp@2.4.2"],
+      "args": ["-y", "coronium-proxy-mcp@2.4.3"],
       "env": {"CORONIUM_TOOL_PROFILE": "buyer", "CORONIUM_ENABLE_SPENDING": "1"}
     }
   }
@@ -138,7 +138,7 @@ How it works:
 - The hosted server never lists `create_account`. Open the account first with the local server or the REST API (see [Agents without a browser](#agents-without-a-browser)), then connect with its API token.
 - The hosted server keeps no customer data. Its logs hold the tool name and argument names, never values, credentials or ticket text.
 
-Run your own copy over HTTP with `npx -y -p coronium-proxy-mcp@2.4.2 coronium-proxy-mcp-http` behind a TLS proxy. It needs an OAuth authorization server that answers the token check described in `src/remote-auth.ts`; settings: `PORT` (default 5031), `HOST` (default 127.0.0.1), `MCP_PUBLIC_URL`, `MCP_ALLOWED_HOSTS`, `MCP_ALLOWED_ORIGINS` and `CORONIUM_BASE_URL`. It refuses to start with `CORONIUM_API_TOKEN`, a password or `CORONIUM_ENABLE_SPENDING` in its environment, because it only acts with each caller's own sign-in.
+Run your own copy over HTTP with `npx -y -p coronium-proxy-mcp@2.4.3 coronium-proxy-mcp-http` behind a TLS proxy. It needs an OAuth authorization server that answers the token check described in `src/remote-auth.ts`; settings: `PORT` (default 5031), `HOST` (default 127.0.0.1), `MCP_PUBLIC_URL`, `MCP_ALLOWED_HOSTS`, `MCP_ALLOWED_ORIGINS` and `CORONIUM_BASE_URL`. It refuses to start with `CORONIUM_API_TOKEN`, a password or `CORONIUM_ENABLE_SPENDING` in its environment, because it only acts with each caller's own sign-in.
 
 ## Install from a listing
 
@@ -151,7 +151,7 @@ Run your own copy over HTTP with `npx -y -p coronium-proxy-mcp@2.4.2 coronium-pr
   ```
   Then run `/mcp`, select `plugin:coronium-mobile-proxies:coronium` and choose Authenticate. Details: [plugins/coronium-mobile-proxies](plugins/coronium-mobile-proxies#readme).
 - **Official MCP Registry**: `io.github.coroniumio/coronium-proxy-mcp` ([registry entry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.coroniumio/coronium-proxy-mcp)). Hosts that read the registry install the npm package `coronium-proxy-mcp` or connect to the hosted remote `https://api.coronium.io/mcp`.
-- **npm**: `npx -y coronium-proxy-mcp@2.4.2` with the environment shown under [Connect](#connect).
+- **npm**: `npx -y coronium-proxy-mcp@2.4.3` with the environment shown under [Connect](#connect).
 - **Glama**: [glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp](https://glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp).
 
 ## Tool profiles
@@ -209,7 +209,7 @@ A `rotation_cooldown` error carries `retry_after_seconds`; wait that long. Anyon
 
 - A person adds account credit or a card in the dashboard at dashboard.coronium.io. A person adds the card in the dashboard; this MCP has no tool that adds one. An agent can fund the account itself with its own crypto (below).
 - Saved card: `get_credit_cards` lists saved cards (brand, last4, expiry). Pass a card's `_id` as `card_id` to `buy_modems_with_card` or `renew_modems_with_card`. If the bank asks the cardholder to authenticate (`card_authentication_required`) or declines (`card_declined`), nothing was charged; the person pays in the dashboard or picks another card. The tool never retries.
-- Own crypto: `get_crypto_balance` returns the USDT (TRC-20) and BTC deposit addresses. After a deposit confirms, `convert_crypto_to_credit` moves it into USD account credit (one way): first with `dry_run: true` to preview, then, after a yes, with `confirm: true` and a new `idempotency_key`. Then buy or renew with `funding_source: "account_credit"`. A confirmed BTC balance can also pay directly with `funding_source: "btc"`. `get_crypto_balance` is marked as a write, not a read: the backend creates a missing deposit wallet on that call. For a pure balance read use `get_balance`.
+- Own crypto: `get_crypto_balance` returns the USDT (TRC-20) and BTC deposit addresses. After a deposit confirms, `convert_crypto_to_credit` moves it into USD account credit (one way; USDT at 1:1, BTC at the live BTC rate): first with `dry_run: true` to preview, then, after a yes, with `confirm: true` and a new `idempotency_key`. Then buy or renew with `funding_source: "account_credit"`. A confirmed BTC balance can also pay directly with `funding_source: "btc"`. `get_crypto_balance` is marked as a write, not a read: the backend creates a missing deposit wallet on that call. For a pure balance read use `get_balance`.
 - Want to try the service first? Buy one paid 1-day plan.
 - Refunds go back to the account balance.
 
