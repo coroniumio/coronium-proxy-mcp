@@ -4,7 +4,7 @@ Manage the dedicated mobile proxies you rent from [Coronium.io](https://www.coro
 
 This plugin cannot make purchases. Buying, renewing, topping up and cancelling happen in the dashboard at https://dashboard.coronium.io.
 
-Spending is off by default in the Coronium MCP server as well. If you want an agent to buy, run the server yourself (outside this plugin) with `CORONIUM_TOOL_PROFILE=buyer` and `CORONIUM_ENABLE_SPENDING=1`. In that profile a purchase needs the exact expected total, an explicit confirmation and an idempotency key, and the server enforces a maximum total. See the [server README](https://github.com/coroniumio/coronium-proxy-mcp#connect).
+Spending is off by default in the Coronium MCP server as well. If you want an agent to buy, run the server yourself (outside this plugin) with `CORONIUM_TOOL_PROFILE=buyer` and `CORONIUM_ENABLE_SPENDING=1`. In that profile a purchase needs the exact expected total, an explicit confirmation and an idempotency key, and the server enforces a maximum total. The hosted address `https://api.coronium.io/mcp/buyer` runs the same `buyer` profile without installing anything; its money tools appear only after you allow purchases for that connection. See the [server README](https://github.com/coroniumio/coronium-proxy-mcp#connect).
 
 ## Requirements
 
