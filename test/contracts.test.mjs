@@ -62,6 +62,15 @@ const backend = createHttpServer(async (req, res) => {
         const delivered = Array.from({length: count}, (_, index) => ({_id: String(index).padStart(24, 'b'), proxy_login: 'fixture'}));
         return json(res, {result: 'ok', charged_usd: charged, currency: 'USD', data: delivered}, 200, {'x-request-id': 'fixture-request', 'x-idempotency-replay': 'false'});
     }
+    // Saved-card lanes answer 200 with the delivered proxies only: no charged_usd, no payment ID.
+    if (/^\/payment\/(?:buy|renew)-with-card\/[^/]+$/.test(path)) {
+        const count = body.modemCount ?? body.modems.length;
+        return json(res, {data: Array.from({length: count}, (_, index) => ({_id: String(index).padStart(24, 'c'), proxy_login: 'fixture'}))});
+    }
+    if (path === '/account/balance/convert') {
+        if (body.dry_run) return json(res, {data: {dry_run: true, preview: {usdt: {coin_amount: 17, usd: 17}, account_credit_after: 337}}});
+        return json(res, {data: {moved: [{coin: 'usdt', coin_amount: 17, usd: 17, rate: 1, move_id: 'move-1', status: 'done', replay: false}], refused: [], account_credit_before: 320, account_credit_after: 337}});
+    }
     if (path.startsWith('/payment/') || path.endsWith('/topup') || path.endsWith('/cancel')) return json(res, {result: 'ok', payment_id: 'fixture-payment', billing: {currency: 'USD', total: 129}, ...body}, 200, {'x-request-id': 'fixture-request', 'x-idempotency-replay': 'false'});
     return json(res, {result: 'ok', data: {path, ...body}});
 });
@@ -101,7 +110,7 @@ test('MCP initialization, all tool schemas, annotations, resources and prompts',
     const client = await connect();
     assert.equal(client.getServerVersion().version, JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
     const {tools} = await client.listTools();
-    assert.equal(tools.length, 65);
+    assert.equal(tools.length, 69);
     assert.equal(new Set(tools.map(tool => tool.name)).size, tools.length);
     for (const tool of tools) {
         assert.equal(tool.inputSchema.type, 'object', tool.name);
@@ -608,7 +617,7 @@ async function toolNames(profile, spendingEnabled) {
     return (await client.listTools()).tools.map(tool => tool.name).sort();
 }
 function expectedProfile(name) {return JSON.parse(readFileSync(new URL(`./profiles/${name}.json`, import.meta.url), 'utf8'));}
-const MONEY_TOOLS = ['buy_modems_with_balance', 'renew_modems_with_balance', 'buy_pool_with_balance', 'topup_pool_key', 'cancel_modem', 'cancel_pool_key'].map(name => `coronium_${name}`);
+const MONEY_TOOLS = ['buy_modems_with_balance', 'renew_modems_with_balance', 'buy_modems_with_card', 'renew_modems_with_card', 'convert_crypto_to_credit', 'buy_pool_with_balance', 'topup_pool_key', 'cancel_modem', 'cancel_pool_key'].map(name => `coronium_${name}`);
 
 test('each profile registers exactly its checked-in tool list', async () => {
     assert.deepEqual(await toolNames('directory', false), expectedProfile('directory'));
@@ -660,7 +669,7 @@ test('every tool has a title, both hints and an output schema in every profile',
 
 test('buyer profile: about ten tools, token-only auth, and with spending off it cannot spend', async () => {
     const names = await toolNames('buyer', false);
-    assert(names.length >= 9 && names.length <= 14, String(names.length));
+    assert(names.length >= 9 && names.length <= 16, String(names.length));
     for (const name of MONEY_TOOLS) assert(!names.includes(name), name);
     const client = await connect();
     const checkToken = (await client.listTools()).tools.find(tool => tool.name === 'coronium_check_token');
@@ -687,7 +696,9 @@ test('buyer profile with spending on: quote then buy with the quoted total', asy
     assert.equal(requests.filter(request => request.path === '/payment/buy-with-account-credit').length, 1);
     const guide = (await client.readResource({uri: 'coronium://guide'})).contents[0].text;
     assert.match(guide, /quote_purchase/);
-    assert.doesNotMatch(guide, /cancel_modem|renew_modems/);
+    assert.match(guide, /convert_crypto_to_credit/);
+    assert.match(guide, /buy_modems_with_card/);
+    assert.doesNotMatch(guide, /cancel_modem/);
 });
 
 test('errors carry isError:true and a recovery_hint; out of stock lists what is in stock now', async () => {
@@ -736,7 +747,7 @@ test('spending stays off unless the full profile and CORONIUM_ENABLE_SPENDING ar
 
 test('every tool route exists in the shared public route fixture', () => {
     const known = new Set([...routeFixture.routes, ...routeFixture.non_v3_routes].map(route => `${route.method} ${route.path}`));
-    assert.equal(routeFixture.routes.length, 72);
+    assert.equal(routeFixture.routes.length, 73);
     assert(toolDefinitions.size >= 66);
     for (const tool of toolDefinitions.values()) {
         if (tool.routes.length === 0) assert(['coronium_logout', 'coronium_get_capabilities'].includes(tool.name), tool.name);
@@ -885,7 +896,7 @@ for (const [name, args, method, path] of [
 ]) test(`Node route forwarding: ${name}`, async () => { data(await call(name, args)); assert.equal(last(path).method, method); });
 
 test('public files carry no internal details, long dashes or non-public contact addresses', () => {
-    const files = ['README.md', 'CHANGELOG.md', 'llms.txt', 'AGENTS.md', 'docs/backend-contract.md', '.env.example', 'package.json', 'test/fixtures/v3-routes.json', ...['api-client', 'config', 'errors', 'formatters', 'mcp-server', 'profiles', 'proxies', 'rotation', 'tool', 'token-store'].map(name => `src/${name}.ts`), ...['account', 'auth', 'node', 'pool', 'proxies', 'shop', 'tickets'].map(name => `src/tools/${name}.ts`)];
+    const files = ['README.md', 'CHANGELOG.md', 'llms.txt', 'AGENTS.md', 'docs/backend-contract.md', '.env.example', 'package.json', 'test/fixtures/v3-routes.json', ...['api-client', 'config', 'connection', 'errors', 'formatters', 'mcp-server', 'profiles', 'proxies', 'rotation', 'tool', 'token-store'].map(name => `src/${name}.ts`), ...['account', 'auth', 'node', 'pool', 'proxies', 'shop', 'tickets'].map(name => `src/tools/${name}.ts`)];
     for (const file of files) {
         const text = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
         assert.doesNotMatch(text, /farmer|koef|ts-api|home\/projects|mongodb|\.(?:js|ts):\d+|security@|support@/i, file);
@@ -984,6 +995,156 @@ test('2.2.1 the agent guide no longer says receipts carry no payment ID', async 
     assert.doesNotMatch(guide, /carry no payment ID/);
     assert.match(guide, /Purchase receipts carry payment_id/);
     assert.match(guide, /max_total_usd/);
+});
+
+// ---- 2.4.0: receipt replay, saved-card lanes, crypto to credit, connection config ----
+
+const sold = (_, res) => json(res, {data: []});
+
+test('2.4.0 a repeat buy or renew with the same key returns the first receipt (replay:true), skipping pre-checks', async () => {
+    const key = randomUUID();
+    const args = {tariff_id: ids.tariff, quantity: 1, funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: key};
+    const first = data(await call('buy_modems_with_balance', args));
+    assert.equal(first.replay, false);
+    // The first call bought the last unit: a fresh pre-check would now say tariff_unavailable.
+    overrides.set('GET /tariffs/available', sold);
+    requests = [];
+    const again = data(await call('buy_modems_with_balance', args));
+    assert.equal(again.replay, true);
+    assert.deepEqual(again.response, first.response);
+    assert.equal(requests.length, 0);
+    error(await call('buy_modems_with_balance', {...args, quantity: 2, expected_total_usd: 258}), 'idempotency_conflict');
+    assert(!requests.some(request => request.path.startsWith('/payment/')));
+    const renewArgs = {modems: [{modem_id: ids.modem, days: 30}], funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()};
+    data(await call('renew_modems_with_balance', renewArgs));
+    overrides.set('POST /payment/renewal-quote', (_, res) => json(res, {error: 'quote down'}, 503));
+    requests = [];
+    const renewed = data(await call('renew_modems_with_balance', renewArgs));
+    assert.equal(renewed.replay, true);
+    assert.equal(renewed.quote_before_submission, null);
+    assert.equal(requests.length, 0);
+});
+
+test('2.4.0 an unclear payment outcome replays the same error, not a pre-check refusal', async () => {
+    overrides.set('POST /payment/buy-with-account-credit', (_, res) => json(res, {error: 'Payment delivery could not be confirmed.', code: 'PAYMENT_DELIVERY_UNCONFIRMED', paymentId: 'pay-replay'}, 503));
+    const args = {tariff_id: ids.tariff, quantity: 1, funding_source: 'account_credit', expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()};
+    error(await call('buy_modems_with_balance', args), 'payment_delivery_unconfirmed');
+    overrides.set('GET /tariffs/available', sold);
+    const replayed = error(await call('buy_modems_with_balance', args), 'payment_delivery_unconfirmed');
+    assert.equal(replayed.payment_id, 'pay-replay');
+    assert.equal(requests.filter(request => request.path === '/payment/buy-with-account-credit').length, 1);
+    // A pre-check refusal sends nothing, so the same key can still be used after a new approval.
+    const fresh = {...args, idempotency_key: randomUUID()};
+    error(await call('buy_modems_with_balance', fresh), 'tariff_unavailable');
+    overrides.delete('GET /tariffs/available');
+    overrides.delete('POST /payment/buy-with-account-credit');
+    assert.equal(data(await call('buy_modems_with_balance', fresh)).replay, false);
+});
+
+test('2.4.0 buy and renew with a saved card use the card routes, the same safety fields and the key header', async () => {
+    const key = randomUUID();
+    const bought = data(await call('buy_modems_with_card', {tariff_id: ids.tariff, quantity: 2, card_id: 'pm_Fixture123', coupon: 'SAVE', expected_total_usd: 232.2, confirm: true, idempotency_key: key}));
+    const request = last('/payment/buy-with-card/pm_Fixture123');
+    assert.deepEqual(request.body, {tariff_id: ids.tariff, modemCount: 2, max_total_usd: 232.2, coupon: {coupon_name: 'SAVE'}});
+    assert.equal(request.headers['idempotency-key'], key);
+    assert.equal(bought.funding_source, 'card');
+    assert.equal(bought.delivery.delivery_verified, true);
+    assert.deepEqual(bought.charge, {approved_usd: 232.2, charged_usd: null, within_approval: null});
+    const renewKey = randomUUID();
+    data(await call('renew_modems_with_card', {modems: [{modem_id: ids.modem, days: 30}], card_id: 'pm_Fixture123', expected_total_usd: 129, confirm: true, idempotency_key: renewKey}));
+    const renew = last('/payment/renew-with-card/pm_Fixture123');
+    assert.deepEqual(renew.body, {modems: [{modem_id: ids.modem, days: 30}], max_total_usd: 129});
+    assert.equal(renew.headers['idempotency-key'], renewKey);
+    requests = [];
+    for (const card_id of ['4242424242424242', 'pm_bad/../x', '']) error(await call('buy_modems_with_card', {tariff_id: ids.tariff, quantity: 1, card_id, expected_total_usd: 129, confirm: true, idempotency_key: randomUUID()}));
+    error(await call('buy_modems_with_card', {tariff_id: ids.tariff, quantity: 1, card_id: 'pm_x1', expected_total_usd: 200, confirm: true, idempotency_key: randomUUID()}), 'price_changed');
+    assert(!requests.some(request => request.path.startsWith('/payment/')));
+});
+
+test('2.4.0 a card that needs authentication or is declined: nothing charged, dashboard next step, no retry', async () => {
+    const args = {tariff_id: ids.tariff, quantity: 1, card_id: 'pm_Auth1', expected_total_usd: 129, confirm: true};
+    overrides.set('POST /payment/buy-with-card/pm_Auth1', (_, res) => json(res, {error: 'authentication_required', code: 'CARD_DECLINED', message: 'Your bank requires authentication for this card. Complete the verification or use another card. Nothing was charged.'}, 402));
+    const auth = error(await call('buy_modems_with_card', {...args, idempotency_key: randomUUID()}), 'card_authentication_required');
+    assert.match(auth.message, /requires authentication/);
+    assert.match(auth.recovery_hint, /dashboard\.coronium\.io/);
+    assert.match(auth.recovery_hint, /Never retry/);
+    overrides.set('POST /payment/buy-with-card/pm_Auth1', (_, res) => json(res, {error: 'card_declined', code: 'CARD_DECLINED', message: 'Your card was declined (insufficient_funds). Nothing was charged.'}, 402));
+    const declined = error(await call('buy_modems_with_card', {...args, idempotency_key: randomUUID()}), 'card_declined');
+    assert.match(declined.message, /declined/);
+    assert.match(declined.recovery_hint, /another saved card/);
+    assert.equal(requests.filter(request => request.path === '/payment/buy-with-card/pm_Auth1').length, 2);
+});
+
+test('2.4.0 crypto to credit: dry run first, then a confirmed move with a key; nothing_to_move and bad input send nothing', async () => {
+    const preview = data(await call('convert_crypto_to_credit', {coin: 'usdt', dry_run: true}));
+    assert.equal(preview.dry_run, true);
+    assert.deepEqual(last('/account/balance/convert').body, {coin: 'usdt', dry_run: true});
+    assert.equal(last('/account/balance/convert').headers['idempotency-key'], undefined);
+    requests = [];
+    error(await call('convert_crypto_to_credit', {coin: 'usdt'}), 'confirmation_required');
+    error(await call('convert_crypto_to_credit', {coin: 'usdt', confirm: true}), 'confirmation_required');
+    error(await call('convert_crypto_to_credit', {coin: 'all', amount_usd: 5, confirm: true, idempotency_key: randomUUID()}), 'invalid_request');
+    assert.equal(requests.length, 0);
+    const key = randomUUID();
+    const moved = data(await call('convert_crypto_to_credit', {confirm: true, idempotency_key: key}));
+    assert.deepEqual(last('/account/balance/convert').body, {coin: 'all'});
+    assert.equal(last('/account/balance/convert').headers['idempotency-key'], key);
+    assert.equal(moved.account_credit_after, 337);
+    assert.equal(moved.replay, false);
+    assert.equal(data(await call('convert_crypto_to_credit', {confirm: true, idempotency_key: key})).replay, true);
+    assert.equal(requests.filter(request => request.path === '/account/balance/convert').length, 1);
+    overrides.set('POST /account/balance/convert', (_, res) => json(res, {error: 'Nothing to move', code: 'NOTHING_TO_MOVE'}, 409));
+    const empty = error(await call('convert_crypto_to_credit', {coin: 'btc', confirm: true, idempotency_key: randomUUID()}), 'nothing_to_move');
+    assert.match(empty.recovery_hint, /get_crypto_balance/);
+});
+
+test('2.4.0 get_proxy_connection returns URLs, env vars and snippets from the account record only', async () => {
+    const client = await connect();
+    const tool = (await client.listTools()).tools.find(entry => entry.name === 'coronium_get_proxy_connection');
+    assert.equal(tool.title, 'Get ready-to-use proxy connection config');
+    assert.equal(tool.annotations.readOnlyHint, true);
+    const result = data(await call('get_proxy_connection', {modem_id: proxy.name}, client));
+    assert.equal(result.protocol, 'http');
+    assert.equal(result.urls.http, 'http://name%40user:p%3Aa%2Fss@203.0.113.8:18080');
+    assert.equal(result.urls.socks5, 'socks5://name%40user:p%3Aa%2Fss@203.0.113.8:18081');
+    assert.deepEqual(result.env, {HTTP_PROXY: result.urls.http, HTTPS_PROXY: result.urls.http, ALL_PROXY: result.urls.socks5});
+    assert.deepEqual(Object.keys(result.snippets), ['curl', 'python_requests', 'python_httpx', 'node_undici', 'node_axios', 'playwright', 'puppeteer', 'selenium']);
+    assert.equal(result.snippets.curl, `curl -x '${result.urls.http}' https://api.ipify.org`);
+    assert.match(result.snippets.playwright, /server: "http:\/\/203\.0\.113\.8:18080", username: "name@user", password: "p:a\/ss"/);
+    assert.match(result.snippets.puppeteer, /--proxy-server=http:\/\/203\.0\.113\.8:18080/);
+    assert.match(result.snippets.puppeteer, /page\.authenticate/);
+    assert.equal(result.proxy.modem_id, ids.modem);
+    assert.equal(result.proxy.country_code, 'US');
+    assert.equal(result.proxy.carrier, null);
+    assert.equal(result.proxy.expires_at, new Date(proxy.tariff_expired_at).toISOString());
+    assert.equal(result.rotation.tool, 'coronium_rotate_modem');
+    assert.equal(result.rotation.rotate_url, null);
+    const socks = data(await call('get_proxy_connection', {modem_id: ids.modem, protocol: 'socks5', formats: ['curl', 'playwright']}, client));
+    assert.deepEqual(Object.keys(socks.snippets), ['curl', 'playwright']);
+    assert.match(socks.snippets.curl, /^curl -x 'socks5h:\/\//);
+    assert.match(socks.snippets.playwright, /http:\/\/203\.0\.113\.8:18080/);
+    const httpOnly = {...proxy, socks_port: null, restartByToken: 'https://rotate.example/r/abc', carrier: {name: 'T-Mobile'}};
+    overrides.set('GET /account/proxies', (_, res) => json(res, {data: [httpOnly]}));
+    const limited = data(await call('get_proxy_connection', {modem_id: ids.modem}, client));
+    assert.equal(limited.urls.socks5, null);
+    assert.equal(limited.env.ALL_PROXY, limited.urls.http);
+    assert.equal(limited.rotation.rotate_url, 'https://rotate.example/r/abc');
+    assert.equal(limited.proxy.carrier, 'T-Mobile');
+    error(await call('get_proxy_connection', {modem_id: ids.modem, protocol: 'socks5'}, client), 'protocol_unavailable');
+    error(await call('get_proxy_connection', {modem_id: ids.second}, client), 'proxy_not_found');
+    assert(requests.every(request => request.method === 'GET'));
+});
+
+test('2.4.0 get_proxy_connection is in every profile; card and conversion tools only in full and buyer with spending', async () => {
+    for (const [profile, spending] of [['directory', true], ['read-only', true], ['buyer', false], ['full', false]]) {
+        const names = await toolNames(profile, spending);
+        assert(names.includes('coronium_get_proxy_connection'), profile);
+        for (const name of ['coronium_buy_modems_with_card', 'coronium_renew_modems_with_card', 'coronium_convert_crypto_to_credit']) assert(!names.includes(name), `${profile} ${name}`);
+    }
+    for (const profile of ['buyer', 'full']) {
+        const names = await toolNames(profile, true);
+        for (const name of ['coronium_buy_modems_with_card', 'coronium_renew_modems_with_card', 'coronium_convert_crypto_to_credit']) assert(names.includes(name), `${profile} ${name}`);
+    }
 });
 
 // Runs last: every request any tool made in this file maps to a fixture route.

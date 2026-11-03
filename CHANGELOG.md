@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.4.0 - 2026-11-03
+
+Agent purchasing and connection setup. Profile counts: directory 22, buyer 15 or 20 with spending on, read-only 32, full 60 or 69 with spending on.
+
+### Added
+
+- `coronium_buy_modems_with_card` and `coronium_renew_modems_with_card`: buy or renew with a saved card (`card_id` from `coronium_get_credit_cards`), with the same contract as the balance tools: quote first, explicit yes, `expected_total_usd` re-checked and sent as `max_total_usd`, `confirm:true` and a new `idempotency_key` (sent as `Idempotency-Key`). A card the bank asks to authenticate is `card_authentication_required` with a dashboard next step; a decline is `card_declined`. Nothing is charged in either case and the tool never retries. Full and buyer profiles, spending on only.
+- `coronium_convert_crypto_to_credit`: move the account's own confirmed USDT and/or BTC into USD account credit (one way), so an agent that holds crypto can deposit, convert and buy with `funding_source: "account_credit"`. `dry_run:true` previews and changes nothing; the real move needs `confirm:true` and an `idempotency_key`. `nothing_to_move` when less than $1 can move. Full and buyer profiles, spending on only.
+- `coronium_get_proxy_connection` (read-only, every profile including directory): one owned proxy's HTTP and SOCKS5 URLs, `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` values, and copy-paste snippets for curl, Python requests and httpx, Node undici and axios, Playwright, Puppeteer and Selenium, plus country, carrier, expiry and the rotation link when the account has one. Values come only from the account's proxy record.
+- The buyer profile also lists `coronium_get_credit_cards`, `coronium_get_renewal_quote` and `coronium_renew_modems_with_balance`, so a buyer agent can pick a card and renew.
+- Tools can carry their own display title.
+
+### Fixed
+
+- Calling a buy or renew again with the same `idempotency_key` returned a pre-check refusal (for example `tariff_unavailable` after the first call bought the last unit) instead of the original receipt. A key this account already sent in the last 24 hours now skips the pre-checks and returns the first receipt, or the first error, with `replay: true`. Nothing is sent again. The same key with a different payload is still `idempotency_conflict`. Applies to every money tool that takes a key.
+
+### Changed
+
+- `coronium_get_crypto_balance` and `coronium_get_credit_cards` describe the new funding paths; the buyer guide starts with a fund-then-buy step. `coronium_get_capabilities` lists `card` among modem funding sources when spending is on.
+- Low-balance errors point to saved cards and crypto conversion as well as the dashboard. `card_declined` and `nothing_to_move` carry their own recovery hints.
+- Payment intents expire after 24 hours in stdio mode too (they already did in hosted mode).
+
+## Plugin 1.3.0 - 2026-11-03
+
+- `connect-my-proxy` uses `coronium_get_proxy_connection` for URLs, env vars and ready snippets.
+
 ## 2.3.1 - 2026-11-02
 
 - Every tool that is not read-only now carries `destructiveHint: true` (create/reply ticket, test modem, OpenVPN config), so each tool is either read-only or destructive, as the Claude connector directory requires. Hosts will ask the user to confirm those writes.

@@ -35,11 +35,12 @@ interface PaymentIntent {
     createdAt: number;
 }
 
-// Hosted mode serves many users from one process. Intents there are keyed on the
-// connection (access tokens change hourly), expire after 24 hours, and each
-// connection keeps at most this many, evicting its oldest first. The backend's own
-// idempotency layer stays the real guard against a double charge.
-const HOSTED_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
+// Payment intents double as the receipt cache: a repeat call with the same key gets
+// the first outcome back. Hosted mode serves many users from one process, so intents
+// there are keyed on the connection (access tokens change hourly) and each connection
+// keeps at most this many, evicting its oldest first. Every intent expires after 24
+// hours. The backend's own idempotency layer stays the real guard against a double charge.
+const INTENT_TTL_MS = 24 * 60 * 60 * 1000;
 const HOSTED_INTENTS_PER_CONNECTION = 500;
 
 const HTML_PATTERN = /^\s*(?:<!doctype\s+html|<html|<head|<body)\b/i;
@@ -256,18 +257,30 @@ export class CoroniumAPI {
     publicGet(path: string, query?: Record<string, unknown>): Promise<any> { return this.request(path, {query, public: true}); }
     catalog(): Promise<any> { return this.request("/tariffs", {public: true, catalog: true}); }
 
+    private async accountScope(): Promise<{scope: string; token: string}> {
+        const token = await this.authenticate();
+        const context = currentContext();
+        const scope = context ? `connection:${context.connectionId}` : createHash("sha256").update(token).digest("hex");
+        this.pruneIntents(scope);
+        return {scope, token};
+    }
+
+    // True when this account already sent a payment with this key in the last 24
+    // hours. Tools then skip their pre-checks and replay the stored outcome: stock or
+    // price that changed because of the first call must not hide its receipt.
+    async hasPaymentIntent(idempotencyKey: string): Promise<boolean> {
+        const {scope} = await this.accountScope();
+        return this.paymentIntents.has(`${scope}:${idempotencyKey}`);
+    }
+
     async payment(path: string, body: unknown, idempotencyKey: string): Promise<ApiObject> {
         // Defence in depth: spending tools are not registered unless allowed,
         // and the transport refuses money calls on its own as well.
         assertSpendingAllowed();
-        const token = await this.authenticate();
+        const {scope, token} = await this.accountScope();
         const context = currentContext();
-        const accountScope = context
-            ? `connection:${context.connectionId}`
-            : createHash("sha256").update(token).digest("hex");
-        const key = `${accountScope}:${idempotencyKey}`;
+        const key = `${scope}:${idempotencyKey}`;
         const fingerprint = createHash("sha256").update(JSON.stringify({path, body})).digest("hex");
-        if (context) this.pruneHostedIntents(accountScope);
         const previous = this.paymentIntents.get(key);
         if (previous) {
             if (previous.fingerprint !== fingerprint) throw new CoroniumError({code: "idempotency_conflict",
@@ -282,14 +295,15 @@ export class CoroniumAPI {
         return result;
     }
 
-    private pruneHostedIntents(accountScope: string): void {
+    private pruneIntents(accountScope: string): void {
         const now = Date.now();
         const prefix = `${accountScope}:`;
         const own: string[] = [];
         for (const [key, intent] of this.paymentIntents) {
-            if (now - intent.createdAt > HOSTED_INTENT_TTL_MS) this.paymentIntents.delete(key);
+            if (now - intent.createdAt > INTENT_TTL_MS) this.paymentIntents.delete(key);
             else if (key.startsWith(prefix)) own.push(key);
         }
+        if (!currentContext()) return;
         // Map iteration follows insertion order, so the first keys are the oldest.
         for (const key of own.slice(0, Math.max(0, own.length - HOSTED_INTENTS_PER_CONNECTION + 1))) this.paymentIntents.delete(key);
     }

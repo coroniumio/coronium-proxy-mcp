@@ -13,7 +13,7 @@ If the user named a proxy (by name, ID or country), use it. Otherwise call `coro
 
 ## 2. Read the connection details
 
-Call `coronium_get_proxy` for that proxy. Use the HTTP and SOCKS5 URLs it returns. If both exist, prefer what the user's tool supports; HTTP is the safer default.
+Call `coronium_get_proxy_connection` for that proxy (pass `protocol` and `formats` when the user named them). It returns the HTTP and SOCKS5 URLs, proxy environment variables, ready snippets for curl, Python requests and httpx, Node.js undici and axios, Playwright, Puppeteer and Selenium, and the rotation link if the account has one. If both protocols exist, prefer what the user's tool supports; HTTP is the safer default, and browsers need HTTP.
 
 Treat the result as secrets:
 - Show credentials only in your reply to the user.
@@ -23,7 +23,7 @@ Treat the result as secrets:
 
 ## 3. Show how to use it
 
-Give the snippet for the tool the user named, with placeholders where the real values go, for example:
+Start from the snippet `coronium_get_proxy_connection` returned for the tool the user named. In code or config you write, swap the literal values for environment variables, for example:
 
 - curl: `curl -x "$PROXY_URL" <the URL the user wants to load>`
 - Python requests: `proxies = {"http": os.environ["PROXY_URL"], "https": os.environ["PROXY_URL"]}`

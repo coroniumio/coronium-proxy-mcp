@@ -1,9 +1,12 @@
 [
   "coronium_get_balance",
   "coronium_get_capabilities",
+  "coronium_get_credit_cards",
   "coronium_get_crypto_balance",
   "coronium_get_payment_status",
   "coronium_get_proxies",
+  "coronium_get_proxy_connection",
+  "coronium_get_renewal_quote",
   "coronium_get_rotation_status",
   "coronium_list_free_modems",
   "coronium_list_tariffs",

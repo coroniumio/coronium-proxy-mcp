@@ -43,7 +43,7 @@ try {
     assert(tools.some(tool => tool.name === 'coronium_get_balance'));
     assert(!tools.some(tool => tool.name === 'coronium_buy_modems_with_balance'));
     assert(!tools.some(tool => tool.name === 'coronium_login'));
-    assert.equal(tools.length, 21);
+    assert.equal(tools.length, 22);
     const result = await client.callTool({name: 'coronium_get_balance', arguments: {}});
     assert.notEqual(result.isError, true);
     assert.equal(result.structuredContent.data.account_credit.amount, 99);

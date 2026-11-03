@@ -64,12 +64,12 @@ export function registerAccountTools(server: McpServer): void {
         run: async () => balances(await api.get("/account")),
     });
     registerTool(server, "coronium_get_crypto_balance", {
-        description: "Get crypto deposit addresses and native balances. Only the BTC balance can pay for proxies through this MCP (funding_source btc), once the deposit confirms. This backend GET can create missing wallets, so it is treated as a write. Use get_balance for a pure balance read.",
+        description: "Get crypto deposit addresses and native balances. To fund purchases with crypto: deposit USDT (TRC-20) or BTC to the address shown here, wait for it to confirm, move it into USD account credit with coronium_convert_crypto_to_credit (when spending is enabled), then buy or renew with funding_source account_credit. A confirmed BTC balance can also be spent directly with funding_source btc. This backend GET can create missing wallets, so it is treated as a write. Use get_balance for a pure balance read.",
         input: {}, access: "write", routes: ["GET /account/crypto-balance"],
         run: async () => ({wallets: arrayResponse(await api.get("/account/crypto-balance", undefined, {mutates: true}), "Wallets")}),
     });
     registerTool(server, "coronium_get_credit_cards", {
-        description: "Read saved-card summaries supplied by the backend. Card checkout and any required authentication are handled in the dashboard.",
+        description: "Read saved-card summaries (brand, last4, expiry; no card numbers). Each card's _id is the card_id for coronium_buy_modems_with_card and coronium_renew_modems_with_card when spending is enabled. Show the user which card will be charged. Adding a card, and any payment the bank asks the cardholder to authenticate, happens in the dashboard.",
         input: {}, routes: ["GET /account/card-list"],
         run: async () => ({response: await api.get("/account/card-list")}),
     });

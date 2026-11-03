@@ -26,15 +26,16 @@ Pick one. The hosted server needs nothing installed.
 | Profile | For | Money tools |
 |---|---|---|
 | `directory` (hosted `/mcp`, the plugin) | Check and manage owned proxies, plans, stock, quotes, tickets | Never |
-| `buyer` (hosted `/mcp/buyer`, or local with `CORONIUM_ENABLE_SPENDING=1`) | An agent that buys and runs a few proxies | `buy_modems_with_balance`, only when spending is on |
-| `full` (local default) | Everything that is not money, plus money tools with spending on | Buy, renew, pool, top-up, cancel with refund, only with spending on |
+| `buyer` (hosted `/mcp/buyer`, or local with `CORONIUM_ENABLE_SPENDING=1`) | An agent that buys and runs a few proxies | Buy and renew by balance or saved card, crypto to credit, only when spending is on |
+| `full` (local default) | Everything that is not money, plus money tools with spending on | Buy, renew, crypto to credit, pool, top-up, cancel with refund, only with spending on |
 | `read-only` | Look only | Never |
 
-On the hosted `/mcp/buyer`, the buy tool appears only after the person allows purchases for that one connection in the dashboard, with their password. If a tool you need is missing, say which profile or setting provides it. Do not look for a workaround.
+On the hosted `/mcp/buyer`, the money tools appear only after the person allows purchases for that one connection in the dashboard, with their password. If a tool you need is missing, say which profile or setting provides it. Do not look for a workaround.
 
 ## 3. Everyday tasks
 
 - **List proxies and connection details.** Call `get_proxies` or `get_proxy`, which return `http_url` and `socks5_url`. Listing does not test anything.
+- **Use a proxy in code or a browser.** Call `get_proxy_connection` with the proxy. It returns the URLs, `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` values and snippets for curl, Python requests and httpx, Node undici and axios, Playwright, Puppeteer and Selenium, plus country, carrier, expiry and the rotation link. Browsers use the HTTP endpoint. Treat the result as secret.
 - **Check that a proxy works.** Call `test_modem`. Report `ok:true` or `ok:false` for that proxy and protocol only.
 - **New IP.** Call `rotate_modem` (by ID, name or rotation token). Read `state`:
   - `done`: the new IP is in `ip`.
@@ -51,16 +52,19 @@ On the hosted `/mcp/buyer`, the buy tool appears only after the person allows pu
 
 1. `list_tariffs` or `list_free_modems`: pick the plan.
 2. `quote_purchase` with the plan and quantity (add `require: ["p0f"]` if the person needs TCP fingerprint control). It returns `total_usd`.
-3. `get_balance`. Show the person the plan, quantity, funding source and **exact total**. Wait for a clear yes for that amount.
-4. `buy_modems_with_balance` with `confirm: true`, `expected_total_usd` set to the quoted total, `funding_source` (`account_credit` or `btc`), the same `require` as the quote, and a **new UUID** `idempotency_key`.
+3. `get_balance`, or `get_credit_cards` to pay by saved card. Show the person the plan, quantity, funding source (or card brand and last4) and **exact total**. Wait for a clear yes for that amount.
+4. `buy_modems_with_balance` with `funding_source` (`account_credit` or `btc`), or `buy_modems_with_card` with `card_id`. Both need `confirm: true`, `expected_total_usd` set to the quoted total, the same `require` as the quote, and a **new UUID** `idempotency_key`.
 5. The receipt carries `payment_id`. On HTTP 202 (`pending: true`) or `payment_delivery_unconfirmed`, poll `get_payment_status` with that `payment_id` and check `get_proxies`. Activation usually takes a few minutes. **Never order again.**
+
+Calling again with the same `idempotency_key` returns the first receipt with `replay: true` and never charges twice. `card_authentication_required` or `card_declined` means nothing was charged: send the person to the dashboard or ask for another card, never retry. Renewals work the same way with `get_renewal_quote` and `renew_modems_with_balance` or `renew_modems_with_card`.
+
+**Funding with your own crypto.** `get_crypto_balance` shows the USDT (TRC-20) and BTC deposit addresses. After the deposit confirms, call `convert_crypto_to_credit` with `dry_run: true`, show the preview, and after a yes call it with `confirm: true` and a new `idempotency_key`. The move into USD account credit is one way. Then buy with `funding_source: "account_credit"`.
 
 On `price_changed`, quote again, ask again, and use a new `idempotency_key`. Neither the quote nor the expected total locks the price. Never split an amount, retry a refused payment through another route, or retry a write automatically.
 
 ## 5. Money facts to state correctly
 
-- This MCP cannot add funds. A person adds account credit in the dashboard (card or crypto), or deposits BTC to the address from `get_crypto_balance` and then pays with `funding_source: "btc"`.
-- The USDT balance is shown but cannot pay through this MCP.
+- A person adds account credit or a card in the dashboard. With spending on, a saved card can pay directly, and confirmed USDT or BTC deposits can be moved into account credit with `convert_crypto_to_credit`. A confirmed BTC balance can also pay with `funding_source: "btc"`.
 - There are no trials. The way to try the service is one paid 1-day plan.
 - Refunds go to the account balance.
 - A coupon that gives no discount is refused (`coupon_invalid`). The person is never charged full price instead.

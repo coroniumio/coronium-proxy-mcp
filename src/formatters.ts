@@ -39,21 +39,34 @@ interface ProxyEndpoint {
     password?: string;
 }
 
-function endpointUrl(protocol: ProxyProtocol, endpoint: ProxyEndpoint): string | null {
-    return proxyUrl(protocol, endpoint.host ?? null, endpoint.port, endpoint.username, endpoint.password);
-}
-
-function legacyUrl(protocol: ProxyProtocol, proxy: ApiObject, host: string | null): string | null {
-    const port = protocol === "http" ? proxy.http_port : proxy.socks_port;
-    return proxyUrl(protocol, host, port, proxy.proxy_login, proxy.proxy_password);
+export interface EndpointParts {
+    host: string;
+    port: number;
+    username: string;
+    password: string;
+    url: string;
 }
 
 // Deliveries with separate HTTP and SOCKS5 logins describe each protocol in
 // proxyEndpoints; the legacy proxy_login/proxy_password fields are HTTP only there.
-function connectionUrl(protocol: ProxyProtocol, proxy: ApiObject, host: string | null): string | null {
+function rawEndpoint(protocol: ProxyProtocol, proxy: ApiObject, host: string | null): ProxyEndpoint {
     const endpoint: ProxyEndpoint | undefined = proxy.proxyEndpoints?.[protocol];
-    if (endpoint && typeof endpoint === "object") return endpointUrl(protocol, endpoint);
-    return legacyUrl(protocol, proxy, host);
+    if (endpoint && typeof endpoint === "object") return endpoint;
+    return {host: host ?? undefined, port: protocol === "http" ? proxy.http_port : proxy.socks_port,
+        username: proxy.proxy_login, password: proxy.proxy_password};
+}
+
+// The host, port and login of one protocol exactly as the backend supplied them,
+// or null when any part is missing or unusable. Nothing is filled in.
+export function endpointParts(protocol: ProxyProtocol, proxy: ApiObject, host: string | null): EndpointParts | null {
+    const endpoint = rawEndpoint(protocol, proxy, host);
+    const url = proxyUrl(protocol, endpoint.host ?? null, endpoint.port, endpoint.username, endpoint.password);
+    if (!url) return null;
+    return {host: endpoint.host!, port: Number(endpoint.port), username: String(endpoint.username), password: String(endpoint.password), url};
+}
+
+function connectionUrl(protocol: ProxyProtocol, proxy: ApiObject, host: string | null): string | null {
+    return endpointParts(protocol, proxy, host)?.url ?? null;
 }
 
 export function normalizeProxy(proxy: ApiObject, countries: ApiObject[] = []): ApiObject {

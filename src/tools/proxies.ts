@@ -3,6 +3,7 @@ import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {z} from "zod";
 import {api, type ApiObject, assertSpendingAllowed} from "../api-client.js";
 import {config} from "../config.js";
+import {connectionConfig, SNIPPET_FORMATS} from "../connection.js";
 import {CoroniumError, invalidResponse} from "../errors.js";
 import {toCustomerCancellation, unwrap} from "../formatters.js";
 import {findProxy, normalizedProxies, proxyField, resolveProxyId} from "../proxies.js";
@@ -199,6 +200,14 @@ export function registerProxyTools(server: McpServer): void {
         description: "Read one owned proxy: credentials, http_url and socks5_url, expiry, rotation token and capability flags. Treat the result as secret. No connection is tested.",
         input: {proxy: proxyField}, routes: ["GET /account/proxies", "GET /countries"],
         run: async ({proxy}) => ({proxy: findProxy(await normalizedProxies(), proxy)}),
+    });
+    registerTool(server, "coronium_get_proxy_connection", {
+        title: "Get ready-to-use proxy connection config",
+        description: "Get copy-paste connection settings for one owned proxy: http and socks5 URLs, HTTP_PROXY/HTTPS_PROXY/ALL_PROXY env vars, and snippets for curl, Python requests and httpx, Node undici and axios, Playwright, Puppeteer and Selenium, plus the line's country, carrier, expiry and how to rotate its IP. protocol picks the URL used in env vars and URL-based snippets (default http when available); browsers always use the HTTP endpoint. Every value comes from the account's proxy record; a missing one is null, never guessed. Treat the result as secret. No connection is tested; use coronium_test_modem for that.",
+        input: {modem_id: proxyField, protocol: z.enum(["http", "socks5"]).optional(),
+            formats: z.array(z.enum(SNIPPET_FORMATS)).min(1).max(SNIPPET_FORMATS.length).optional().describe("Only these snippets. Omit for all.")},
+        routes: ["GET /account/proxies", "GET /countries"],
+        run: async ({modem_id, protocol, formats}) => connectionConfig(findProxy(await normalizedProxies(), modem_id), protocol, formats),
     });
     registerTool(server, "coronium_get_proxy_health", {
         description: "Read the backend health snapshot for owned proxies. It is evidence for diagnosis, not a reason to replace or reconfigure a proxy on its own, and does not prove every protocol works.",

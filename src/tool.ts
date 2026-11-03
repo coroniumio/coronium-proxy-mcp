@@ -9,6 +9,8 @@ import {type Access, isScopeAllowed, isToolEnabled, type MoneyEffect} from "./pr
 export type RouteRef = `${"GET" | "POST" | "PUT" | "DELETE"} /${string}`;
 
 interface ToolOptions<S extends z.ZodRawShape> {
+    // Shown to the user by hosts. Defaults to the tool name in words.
+    title?: string;
     description: string;
     input: S;
     // Every backend route the tool can call. Empty for local-only tools.
@@ -64,12 +66,13 @@ export function registerTool<S extends z.ZodRawShape>(server: McpServer, name: s
     // write (ticket, test, VPN profile) should be confirmed by the user before it runs.
     const destructive: boolean = money !== "none" || access !== "read" || (options.destructive ?? false);
     const outputSchema = z.object({data: options.output ?? z.record(z.unknown()), observed_at: z.string()});
+    const toolTitle: string = options.title ?? title(name);
     const register: Registration = () => server.registerTool(name, {
-        title: title(name),
+        title: toolTitle,
         description: options.description,
         inputSchema: z.object(options.input).strict(),
         outputSchema,
-        annotations: {title: title(name), readOnlyHint: access === "read", destructiveHint: destructive,
+        annotations: {title: toolTitle, readOnlyHint: access === "read", destructiveHint: destructive,
             idempotentHint: options.idempotent ?? access === "read", openWorldHint: true},
     }, async (args) => {
         try {

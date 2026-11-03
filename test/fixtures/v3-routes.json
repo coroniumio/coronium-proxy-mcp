@@ -587,6 +587,58 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/account/balance/convert",
+      "auth": "bearer",
+      "path_params": [],
+      "query": [],
+      "body": [
+        {
+          "name": "coin",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "amount_usd",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "dry_run",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "fields": [
+            "data"
+          ]
+        },
+        {
+          "status": 400,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 409,
+          "fields": [
+            "error",
+            "code"
+          ]
+        },
+        {
+          "status": 500,
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    {
       "method": "GET",
       "path": "/account/proxies/health",
       "auth": "bearer",

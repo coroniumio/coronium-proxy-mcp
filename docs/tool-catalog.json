@@ -1,5 +1,5 @@
 {
-  "version": "2.3.1",
+  "version": "2.4.0",
   "tools": [
     {
       "name": "coronium_apply_modem_settings",
@@ -302,7 +302,7 @@
     {
       "name": "coronium_buy_modems_with_balance",
       "title": "Buy modems with balance",
-      "description": "SPENDS MONEY. Buy dedicated proxies from account credit or BTC. First call coronium_quote_purchase and coronium_get_balance, show the user the plan, quantity, funding source and total, and get an explicit yes. Pass that total as expected_total_usd: the tool re-reads the live price and refuses if it differs, and sends it as max_total_usd so the server refuses (409 price_changed, nothing charged) a higher total too. Use one new idempotency_key per purchase; it goes out as the Idempotency-Key header. The receipt carries payment_id: on 202 (pending) or 503 payment_delivery_unconfirmed, poll coronium_get_payment_status with it and check coronium_get_proxies; never buy again. Activation usually takes a few minutes.",
+      "description": "SPENDS MONEY. Buy dedicated proxies from account credit or BTC. First call coronium_quote_purchase and coronium_get_balance, show the user the plan, quantity, funding source and total, and get an explicit yes. Pass that total as expected_total_usd. The tool re-checks the live total and refuses if it differs, and sends it as max_total_usd so the server refuses a higher total too (409 price_changed, nothing charged). Use one new idempotency_key per intent (sent as the Idempotency-Key header); a repeat call with the same key returns the first receipt with replay:true and never charges again. On 202 (pending) or 503 payment_delivery_unconfirmed, poll coronium_get_payment_status with payment_id and check coronium_get_proxies; never pay again. Activation usually takes a few minutes.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -314,14 +314,6 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 100
-          },
-          "funding_source": {
-            "type": "string",
-            "enum": [
-              "account_credit",
-              "btc"
-            ],
-            "description": "Required. account_credit spends USD account credit; btc spends the native BTC balance at the live rate."
           },
           "expected_total_usd": {
             "type": "number",
@@ -375,15 +367,23 @@
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]{8,128}$",
             "description": "A unique UUID per purchase intent. Preserve it if reconciling that same intent; never reuse it for a different order."
+          },
+          "funding_source": {
+            "type": "string",
+            "enum": [
+              "account_credit",
+              "btc"
+            ],
+            "description": "Required. account_credit spends USD account credit; btc spends the native BTC balance at the live rate."
           }
         },
         "required": [
           "tariff_id",
           "quantity",
-          "funding_source",
           "expected_total_usd",
           "confirm",
-          "idempotency_key"
+          "idempotency_key",
+          "funding_source"
         ],
         "additionalProperties": false,
         "$schema": "http://json-schema.org/draft-07/schema#"
@@ -408,6 +408,121 @@
       },
       "annotations": {
         "title": "Buy modems with balance",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "coronium_buy_modems_with_card",
+      "title": "Buy modems with card",
+      "description": "SPENDS MONEY. Buy dedicated proxies with a saved card (charged off-session). First call coronium_quote_purchase and coronium_get_credit_cards, show the user the plan, quantity, card (brand and last4) and total, and get an explicit yes. Pass that total as expected_total_usd. The tool re-checks the live total and refuses if it differs, and sends it as max_total_usd so the server refuses a higher total too (409 price_changed, nothing charged). Use one new idempotency_key per intent (sent as the Idempotency-Key header); a repeat call with the same key returns the first receipt with replay:true and never charges again. On 202 (pending) or 503 payment_delivery_unconfirmed, poll coronium_get_payment_status with payment_id and check coronium_get_proxies; never pay again. If the bank requires the cardholder to authenticate (card_authentication_required) or declines (card_declined), nothing was charged: send the user to the dashboard or ask for another card; never retry automatically.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tariff_id": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "expected_total_usd": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "The USD total the user approved, as returned by the quote. The tool re-reads the live price just before sending and refuses if the total is now different. This is a client-side check, not a server price lock."
+          },
+          "country_code": {
+            "type": "string",
+            "pattern": "^[a-zA-Z]{2}$",
+            "description": "Optional guard: refuse if this does not match the selected tariff's country."
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            ]
+          },
+          "coupon": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "require": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "p0f"
+              ]
+            },
+            "maxItems": 1,
+            "description": "Features every bought unit must have. [\"p0f\"] buys only units with TCP fingerprint (p0f) control; refused before any charge when the plan has too few of them."
+          },
+          "want_p0f": {
+            "type": "boolean",
+            "description": "Deprecated alias: want_p0f:true is the same as require:[\"p0f\"]. Use require."
+          },
+          "confirm": {
+            "type": "boolean",
+            "const": true,
+            "description": "True only after the user authorized this exact purchase, renewal or refund, including its funding source and amount."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{8,128}$",
+            "description": "A unique UUID per purchase intent. Preserve it if reconciling that same intent; never reuse it for a different order."
+          },
+          "card_id": {
+            "type": "string",
+            "pattern": "^(?:pm|card)_[A-Za-z0-9]{1,250}$",
+            "description": "Saved card _id from coronium_get_credit_cards. Charged off-session; the user must have approved this card for this total."
+          }
+        },
+        "required": [
+          "tariff_id",
+          "quantity",
+          "expected_total_usd",
+          "confirm",
+          "idempotency_key",
+          "card_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "observed_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "observed_at"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Buy modems with card",
         "readOnlyHint": false,
         "destructiveHint": true,
         "idempotentHint": false,
@@ -818,6 +933,76 @@
       }
     },
     {
+      "name": "coronium_convert_crypto_to_credit",
+      "title": "Convert crypto to credit",
+      "description": "MOVES MONEY (one way). Move the account's own confirmed USDT and/or BTC wallet balance into USD account credit at the live rate, so it can buy or renew with funding_source account_credit. It cannot be moved back. First call with dry_run:true (changes nothing) and show the user the preview: coins, amounts, rate and USD credit. Only after a clear yes, call again without dry_run, with confirm:true and one new idempotency_key; a repeat call with the same key returns the first result with replay:true and never moves twice. nothing_to_move means the wallets hold less than $1: deposit first (coronium_get_crypto_balance shows the addresses) and wait for confirmation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "coin": {
+            "type": "string",
+            "enum": [
+              "usdt",
+              "btc",
+              "all"
+            ],
+            "description": "Default all."
+          },
+          "amount_usd": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000,
+            "exclusiveMinimum": 0,
+            "description": "Move only this many USD worth. Single coin only."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "True previews the move and changes nothing. Do this first."
+          },
+          "confirm": {
+            "type": "boolean",
+            "const": true,
+            "description": "Required (true) unless dry_run, after the user approved the preview."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{8,128}$",
+            "description": "Required unless dry_run: one new UUID per approved move."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "observed_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "observed_at"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Convert crypto to credit",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
       "name": "coronium_create_ticket",
       "title": "Create ticket",
       "description": "Open a new support ticket (subject, message, category, related proxies). Show the user the text first and send only after approval. The backend allows about 1 ticket or reply per minute and 5 per hour.",
@@ -1175,7 +1360,7 @@
     {
       "name": "coronium_get_credit_cards",
       "title": "Get credit cards",
-      "description": "Read saved-card summaries supplied by the backend. Card checkout and any required authentication are handled in the dashboard.",
+      "description": "Read saved-card summaries (brand, last4, expiry; no card numbers). Each card's _id is the card_id for coronium_buy_modems_with_card and coronium_renew_modems_with_card when spending is enabled. Show the user which card will be charged. Adding a card, and any payment the bank asks the cardholder to authenticate, happens in the dashboard.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -1214,7 +1399,7 @@
     {
       "name": "coronium_get_crypto_balance",
       "title": "Get crypto balance",
-      "description": "Get crypto deposit addresses and native balances. Only the BTC balance can pay for proxies through this MCP (funding_source btc), once the deposit confirms. This backend GET can create missing wallets, so it is treated as a write. Use get_balance for a pure balance read.",
+      "description": "Get crypto deposit addresses and native balances. To fund purchases with crypto: deposit USDT (TRC-20) or BTC to the address shown here, wait for it to confirm, move it into USD account credit with coronium_convert_crypto_to_credit (when spending is enabled), then buy or renew with funding_source account_credit. A confirmed BTC balance can also be spent directly with funding_source btc. This backend GET can create missing wallets, so it is treated as a write. Use get_balance for a pure balance read.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -1650,6 +1835,81 @@
       },
       "annotations": {
         "title": "Get proxy",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "coronium_get_proxy_connection",
+      "title": "Get ready-to-use proxy connection config",
+      "description": "Get copy-paste connection settings for one owned proxy: http and socks5 URLs, HTTP_PROXY/HTTPS_PROXY/ALL_PROXY env vars, and snippets for curl, Python requests and httpx, Node undici and axios, Playwright, Puppeteer and Selenium, plus the line's country, carrier, expiry and how to rotate its IP. protocol picks the URL used in env vars and URL-based snippets (default http when available); browsers always use the HTTP endpoint. Every value comes from the account's proxy record; a missing one is null, never guessed. Treat the result as secret. No connection is tested; use coronium_test_modem for that.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "modem_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Owned modem _id (24 hex characters), exact name or portId from get_proxies."
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "http",
+              "socks5"
+            ]
+          },
+          "formats": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "curl",
+                "python_requests",
+                "python_httpx",
+                "node_undici",
+                "node_axios",
+                "playwright",
+                "puppeteer",
+                "selenium"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 8,
+            "description": "Only these snippets. Omit for all."
+          }
+        },
+        "required": [
+          "modem_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "observed_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "observed_at"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Get ready-to-use proxy connection config",
         "readOnlyHint": true,
         "destructiveHint": false,
         "idempotentHint": true,
@@ -2614,7 +2874,7 @@
     {
       "name": "coronium_renew_modems_with_balance",
       "title": "Renew modems with balance",
-      "description": "SPENDS MONEY. Renew owned proxies for the given days from account credit or BTC. Get a renewal quote, show the total and get an explicit yes, then pass that total as expected_total_usd: the tool re-quotes and refuses if the total differs, and sends it as max_total_usd so the server refuses a higher total too. Sends modems:[{modem_id,days}] and never a purchase tariff. Preserve the idempotency key and receipt; on 202 or an unclear result poll coronium_get_payment_status with payment_id, never renew again.",
+      "description": "SPENDS MONEY. Renew owned proxies for the given days from account credit or BTC. Get a renewal quote, show the total and get an explicit yes, then pass that total as expected_total_usd. Sends modems:[{modem_id,days}] and never a purchase tariff. The tool re-checks the live total and refuses if it differs, and sends it as max_total_usd so the server refuses a higher total too (409 price_changed, nothing charged). Use one new idempotency_key per intent (sent as the Idempotency-Key header); a repeat call with the same key returns the first receipt with replay:true and never charges again. On 202 (pending) or 503 payment_delivery_unconfirmed, poll coronium_get_payment_status with payment_id and check coronium_get_proxies; never pay again.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2702,6 +2962,103 @@
       },
       "annotations": {
         "title": "Renew modems with balance",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "coronium_renew_modems_with_card",
+      "title": "Renew modems with card",
+      "description": "SPENDS MONEY. Renew owned proxies for the given days with a saved card (charged off-session). Get a renewal quote and the card from coronium_get_credit_cards, show the total and card and get an explicit yes, then pass that total as expected_total_usd. Sends modems:[{modem_id,days}] and never a purchase tariff. The tool re-checks the live total and refuses if it differs, and sends it as max_total_usd so the server refuses a higher total too (409 price_changed, nothing charged). Use one new idempotency_key per intent (sent as the Idempotency-Key header); a repeat call with the same key returns the first receipt with replay:true and never charges again. On 202 (pending) or 503 payment_delivery_unconfirmed, poll coronium_get_payment_status with payment_id and check coronium_get_proxies; never pay again. card_authentication_required or card_declined means nothing was charged: send the user to the dashboard or ask for another card; never retry automatically.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "modems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "modem_id": {
+                  "type": "string",
+                  "pattern": "^[a-fA-F0-9]{24}$"
+                },
+                "days": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 90
+                }
+              },
+              "required": [
+                "modem_id",
+                "days"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 100
+          },
+          "coupon": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "card_id": {
+            "type": "string",
+            "pattern": "^(?:pm|card)_[A-Za-z0-9]{1,250}$",
+            "description": "Saved card _id from coronium_get_credit_cards. Charged off-session; the user must have approved this card for this total."
+          },
+          "expected_total_usd": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "The USD total the user approved, as returned by the quote. The tool re-reads the live price just before sending and refuses if the total is now different. This is a client-side check, not a server price lock."
+          },
+          "confirm": {
+            "type": "boolean",
+            "const": true,
+            "description": "True only after the user authorized this exact purchase, renewal or refund, including its funding source and amount."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{8,128}$",
+            "description": "A unique UUID per purchase intent. Preserve it if reconciling that same intent; never reuse it for a different order."
+          }
+        },
+        "required": [
+          "modems",
+          "card_id",
+          "expected_total_usd",
+          "confirm",
+          "idempotency_key"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "observed_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "observed_at"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Renew modems with card",
         "readOnlyHint": false,
         "destructiveHint": true,
         "idempotentHint": false,

@@ -3,7 +3,7 @@ import {z} from "zod";
 import {api, type ApiObject} from "../api-client.js";
 import {CoroniumError, invalidResponse} from "../errors.js";
 import {arrayResponse} from "../formatters.js";
-import {countrySchema, expectedTotalField, idSchema, paymentFields, registerTool} from "../tool.js";
+import {countrySchema, expectedTotalField, idSchema, paymentFields, registerTool, usdAmount} from "../tool.js";
 
 interface RenewalLine {
     modem_id: string;
@@ -260,42 +260,160 @@ function registerCatalogTools(server: McpServer): void {
     });
 }
 
+const DASHBOARD_URL = "https://dashboard.coronium.io";
+const cardIdField = z.string().regex(/^(?:pm|card)_[A-Za-z0-9]{1,250}$/, "Use a card _id from coronium_get_credit_cards.")
+    .describe("Saved card _id from coronium_get_credit_cards. Charged off-session; the user must have approved this card for this total.");
+const buyFields = {tariff_id: idSchema, quantity: z.number().int().min(1).max(100), expected_total_usd: expectedTotalField,
+    country_code: countrySchema.optional().describe("Optional guard: refuse if this does not match the selected tariff's country."),
+    metadata: z.union([z.string().max(8000), z.record(z.unknown())]).optional(), coupon: couponField, require: requireField, want_p0f: wantP0fField, ...paymentFields};
+
+interface BuyArgs {
+    tariff_id: string;
+    quantity: number;
+    expected_total_usd: number;
+    country_code?: string;
+    metadata?: string | Record<string, unknown>;
+    coupon?: string;
+    require?: "p0f"[];
+    want_p0f?: boolean;
+    idempotency_key: string;
+}
+
+interface RenewArgs {
+    modems: RenewalLine[];
+    coupon?: string;
+    expected_total_usd: number;
+    idempotency_key: string;
+}
+
+// A repeat call with a key this account already sent skips the pre-checks and
+// returns the first outcome (replay:true). Stock or price that changed because of
+// the first call must never turn its receipt into a refusal. A different payload
+// under the same key is refused as idempotency_conflict, never sent.
+async function pay(path: string, body: Record<string, unknown>, idempotencyKey: string, preChecks: () => Promise<unknown>,
+    send: typeof submitPayment = submitPayment): Promise<{receipt: ApiObject; replay: boolean; checked: unknown}> {
+    const replay = await api.hasPaymentIntent(idempotencyKey);
+    const checked = replay ? null : await preChecks();
+    return {receipt: await send(path, body, idempotencyKey), replay, checked};
+}
+
+async function buyModems(path: string, args: BuyArgs, send?: typeof submitPayment): Promise<Record<string, unknown>> {
+    const {tariff_id, quantity, expected_total_usd, country_code, metadata, coupon, require, want_p0f, idempotency_key} = args;
+    const p0f = Boolean(require?.includes("p0f")) || want_p0f === true;
+    // A buy sends only the purchase fields, never a renewal basket.
+    // max_total_usd lets the server refuse a total above the approval.
+    const body = {tariff_id, modemCount: quantity, max_total_usd: expected_total_usd, ...couponBody(coupon),
+        ...(metadata !== undefined ? {metadata: metadataText(metadata)} : {}),
+        ...(p0f ? {require: ["p0f"]} : {})};
+    const {receipt, replay} = await pay(path, body, idempotency_key, async () => {
+        const tariff = await currentTariff(tariff_id, quantity, country_code);
+        if (p0f) assertP0fStock(tariff, quantity);
+        assertMatchesApproval(await currentBuyTotal(tariff, quantity, coupon), expected_total_usd);
+    }, send);
+    const followUp = paymentFollowUp(receipt);
+    return {...receipt, replay, ...followUp, charge: chargeReport(receipt, expected_total_usd),
+        delivery: {...deliveryReport(receipt, quantity), next_step: followUp.next_step}};
+}
+
+async function renewModems(path: string, args: RenewArgs, send?: typeof submitPayment): Promise<Record<string, unknown>> {
+    const {modems, coupon, expected_total_usd, idempotency_key} = args;
+    const {receipt, replay, checked} = await pay(path, {modems, max_total_usd: expected_total_usd, ...couponBody(coupon)}, idempotency_key, async () => {
+        const quote = await renewalQuote(modems, coupon);
+        assertMatchesApproval(quote.total_usd, expected_total_usd);
+        return quote;
+    }, send);
+    return {quote_before_submission: checked, ...receipt, replay, ...paymentFollowUp(receipt), charge: chargeReport(receipt, expected_total_usd)};
+}
+
+const CARD_AUTH_HINT = `Nothing was charged. The bank wants the cardholder to approve this payment themselves. Ask the user to pay once at ${DASHBOARD_URL}, or to choose another saved card or fund account credit. Never retry this card from here.`;
+
+// Card refusals carry the reason in body.message; body.error is the provider's code.
+async function submitCardPayment(path: string, body: Record<string, unknown>, idempotencyKey: string): Promise<ApiObject> {
+    try {
+        return await submitPayment(path, body, idempotencyKey);
+    } catch (error) {
+        if (!(error instanceof CoroniumError) || error.details.code !== "card_declined") throw error;
+        const upstream = (error.details.details ?? {}) as ApiObject;
+        const message = typeof upstream.message === "string" && upstream.message ? upstream.message : error.details.message;
+        if (upstream.error === "authentication_required") {
+            throw new CoroniumError({...error.details, code: "card_authentication_required", message, suggested_action: "use_dashboard", recovery_hint: CARD_AUTH_HINT});
+        }
+        throw new CoroniumError({...error.details, message});
+    }
+}
+
+function cardPath(lane: "buy" | "renew", cardId: string): string {
+    return `/payment/${lane}-with-card/${encodeURIComponent(cardId)}`;
+}
+
+const SAFETY = "The tool re-checks the live total and refuses if it differs, and sends it as max_total_usd so the server refuses a higher total too (409 price_changed, nothing charged). Use one new idempotency_key per intent (sent as the Idempotency-Key header); a repeat call with the same key returns the first receipt with replay:true and never charges again. On 202 (pending) or 503 payment_delivery_unconfirmed, poll coronium_get_payment_status with payment_id and check coronium_get_proxies; never pay again.";
+
 function registerSpendingTools(server: McpServer): void {
     registerTool(server, "coronium_buy_modems_with_balance", {
-        description: "SPENDS MONEY. Buy dedicated proxies from account credit or BTC. First call coronium_quote_purchase and coronium_get_balance, show the user the plan, quantity, funding source and total, and get an explicit yes. Pass that total as expected_total_usd: the tool re-reads the live price and refuses if it differs, and sends it as max_total_usd so the server refuses (409 price_changed, nothing charged) a higher total too. Use one new idempotency_key per purchase; it goes out as the Idempotency-Key header. The receipt carries payment_id: on 202 (pending) or 503 payment_delivery_unconfirmed, poll coronium_get_payment_status with it and check coronium_get_proxies; never buy again. Activation usually takes a few minutes.",
-        input: {tariff_id: idSchema, quantity: z.number().int().min(1).max(100), funding_source: fundingSource, expected_total_usd: expectedTotalField,
-            country_code: countrySchema.optional().describe("Optional guard: refuse if this does not match the selected tariff's country."),
-            metadata: z.union([z.string().max(8000), z.record(z.unknown())]).optional(), coupon: couponField, require: requireField, want_p0f: wantP0fField, ...paymentFields},
+        description: `SPENDS MONEY. Buy dedicated proxies from account credit or BTC. First call coronium_quote_purchase and coronium_get_balance, show the user the plan, quantity, funding source and total, and get an explicit yes. Pass that total as expected_total_usd. ${SAFETY} Activation usually takes a few minutes.`,
+        input: {...buyFields, funding_source: fundingSource},
         access: "write", money: "spends",
         routes: ["GET /tariffs/available", "POST /coupons/check", "POST /payment/buy-with-account-credit", "POST /payment/buy-modems-with-crypto-balance"],
-        run: async ({tariff_id, quantity, funding_source, expected_total_usd, country_code, metadata, coupon, require, want_p0f, idempotency_key}) => {
-            const p0f = Boolean(require?.includes("p0f")) || want_p0f === true;
-            const tariff = await currentTariff(tariff_id, quantity, country_code);
-            if (p0f) assertP0fStock(tariff, quantity);
-            assertMatchesApproval(await currentBuyTotal(tariff, quantity, coupon), expected_total_usd);
-            // A buy sends only the purchase fields, never a renewal basket.
-            // max_total_usd lets the server refuse a total above the approval.
-            const body = {tariff_id, modemCount: quantity, max_total_usd: expected_total_usd, ...couponBody(coupon),
-                ...(metadata !== undefined ? {metadata: metadataText(metadata)} : {}),
-                ...(p0f ? {require: ["p0f"]} : {})};
+        run: async ({funding_source, ...args}) => {
             const path = funding_source === "btc" ? "/payment/buy-modems-with-crypto-balance" : "/payment/buy-with-account-credit";
-            const receipt = await submitPayment(path, body, idempotency_key);
-            const followUp = paymentFollowUp(receipt);
-            return {funding_source, ...receipt, ...followUp, charge: chargeReport(receipt, expected_total_usd),
-                delivery: {...deliveryReport(receipt, quantity), next_step: followUp.next_step}};
+            return {funding_source, ...await buyModems(path, args)};
         },
     });
+    registerTool(server, "coronium_buy_modems_with_card", {
+        description: `SPENDS MONEY. Buy dedicated proxies with a saved card (charged off-session). First call coronium_quote_purchase and coronium_get_credit_cards, show the user the plan, quantity, card (brand and last4) and total, and get an explicit yes. Pass that total as expected_total_usd. ${SAFETY} If the bank requires the cardholder to authenticate (card_authentication_required) or declines (card_declined), nothing was charged: send the user to the dashboard or ask for another card; never retry automatically.`,
+        input: {...buyFields, card_id: cardIdField},
+        access: "write", money: "spends",
+        routes: ["GET /tariffs/available", "POST /coupons/check", "POST /payment/buy-with-card/:card_id"],
+        run: async ({card_id, ...args}) => ({funding_source: "card", ...await buyModems(cardPath("buy", card_id), args, submitCardPayment)}),
+    });
     registerTool(server, "coronium_renew_modems_with_balance", {
-        description: "SPENDS MONEY. Renew owned proxies for the given days from account credit or BTC. Get a renewal quote, show the total and get an explicit yes, then pass that total as expected_total_usd: the tool re-quotes and refuses if the total differs, and sends it as max_total_usd so the server refuses a higher total too. Sends modems:[{modem_id,days}] and never a purchase tariff. Preserve the idempotency key and receipt; on 202 or an unclear result poll coronium_get_payment_status with payment_id, never renew again.",
+        description: `SPENDS MONEY. Renew owned proxies for the given days from account credit or BTC. Get a renewal quote, show the total and get an explicit yes, then pass that total as expected_total_usd. Sends modems:[{modem_id,days}] and never a purchase tariff. ${SAFETY}`,
         input: {...renewalFields, funding_source: fundingSource, expected_total_usd: expectedTotalField, ...paymentFields},
         access: "write", money: "spends",
         routes: ["POST /payment/renewal-quote", "POST /payment/renew-with-account-credit", "POST /payment/renew-modems-with-crypto-balance"],
-        run: async ({modems, coupon, funding_source, expected_total_usd, idempotency_key}) => {
-            const quote = await renewalQuote(modems, coupon);
-            assertMatchesApproval(quote.total_usd, expected_total_usd);
+        run: async ({funding_source, ...args}) => {
             const path = funding_source === "btc" ? "/payment/renew-modems-with-crypto-balance" : "/payment/renew-with-account-credit";
-            const receipt = await submitPayment(path, {modems, max_total_usd: expected_total_usd, ...couponBody(coupon)}, idempotency_key);
-            return {funding_source, quote_before_submission: quote, ...receipt, ...paymentFollowUp(receipt), charge: chargeReport(receipt, expected_total_usd)};
+            return {funding_source, ...await renewModems(path, args)};
+        },
+    });
+    registerTool(server, "coronium_renew_modems_with_card", {
+        description: `SPENDS MONEY. Renew owned proxies for the given days with a saved card (charged off-session). Get a renewal quote and the card from coronium_get_credit_cards, show the total and card and get an explicit yes, then pass that total as expected_total_usd. Sends modems:[{modem_id,days}] and never a purchase tariff. ${SAFETY} card_authentication_required or card_declined means nothing was charged: send the user to the dashboard or ask for another card; never retry automatically.`,
+        input: {...renewalFields, card_id: cardIdField, expected_total_usd: expectedTotalField, ...paymentFields},
+        access: "write", money: "spends",
+        routes: ["POST /payment/renewal-quote", "POST /payment/renew-with-card/:card_id"],
+        run: async ({card_id, ...args}) => ({funding_source: "card", ...await renewModems(cardPath("renew", card_id), args, submitCardPayment)}),
+    });
+    registerConversionTool(server);
+}
+
+const CONVERT_PATH = "/account/balance/convert";
+
+function conversionBody(coin: string, amountUsd: number | undefined, dryRun: boolean): Record<string, unknown> {
+    if (amountUsd !== undefined && coin === "all") {
+        throw new CoroniumError({code: "invalid_request", message: "amount_usd needs a single coin (usdt or btc), not all. Nothing was moved.", suggested_action: "review_request"});
+    }
+    return {coin, ...(amountUsd !== undefined ? {amount_usd: amountUsd} : {}), ...(dryRun ? {dry_run: true} : {})};
+}
+
+function registerConversionTool(server: McpServer): void {
+    registerTool(server, "coronium_convert_crypto_to_credit", {
+        description: "MOVES MONEY (one way). Move the account's own confirmed USDT and/or BTC wallet balance into USD account credit at the live rate, so it can buy or renew with funding_source account_credit. It cannot be moved back. First call with dry_run:true (changes nothing) and show the user the preview: coins, amounts, rate and USD credit. Only after a clear yes, call again without dry_run, with confirm:true and one new idempotency_key; a repeat call with the same key returns the first result with replay:true and never moves twice. nothing_to_move means the wallets hold less than $1: deposit first (coronium_get_crypto_balance shows the addresses) and wait for confirmation.",
+        input: {coin: z.enum(["usdt", "btc", "all"]).optional().describe("Default all."),
+            amount_usd: usdAmount.positive().optional().describe("Move only this many USD worth. Single coin only."),
+            dry_run: z.boolean().optional().describe("True previews the move and changes nothing. Do this first."),
+            confirm: paymentFields.confirm.optional().describe("Required (true) unless dry_run, after the user approved the preview."),
+            idempotency_key: paymentFields.idempotency_key.optional().describe("Required unless dry_run: one new UUID per approved move.")},
+        access: "write", money: "spends", routes: ["POST /account/balance/convert"],
+        run: async ({coin = "all", amount_usd, dry_run, confirm, idempotency_key}) => {
+            if (dry_run) return {dry_run: true, response: await api.post(CONVERT_PATH, conversionBody(coin, amount_usd, true), {readOnly: true}),
+                next_step: "Show the preview to the user. Only after a clear yes, call again without dry_run, with confirm:true and a new idempotency_key."};
+            if (confirm !== true || !idempotency_key) {
+                throw new CoroniumError({code: "confirmation_required", message: "A real move needs confirm:true and an idempotency_key after the user approved a dry_run preview. Nothing was moved.", suggested_action: "review_request"});
+            }
+            const {receipt, replay} = await pay(CONVERT_PATH, conversionBody(coin, amount_usd, false), idempotency_key, async () => undefined);
+            const after: unknown = receipt?.response?.data?.account_credit_after;
+            return {...receipt, replay, account_credit_after: typeof after === "number" ? after : null,
+                next_step: "Check coronium_get_balance, then quote and buy or renew with funding_source account_credit. Never repeat the move to fix an unclear result; check the balance first."};
         },
     });
 }

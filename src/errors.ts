@@ -64,9 +64,13 @@ const HINTS_BY_ACTION: Readonly<Record<string, string>> = {
     wait_retry_after_then_check_rotation_status: "Wait retry_after_seconds, then call coronium_get_rotation_status. Do not replace the proxy because of a cooldown.",
 };
 
+const LOW_BALANCE_HINT = `The balance is too low for this total. Nothing was charged. A person can add funds at ${DASHBOARD}, pay with a saved card (coronium_buy_modems_with_card) if one is on file, or deposit USDT or BTC to the address from coronium_get_crypto_balance and, once it confirms, move it into account credit with coronium_convert_crypto_to_credit. Then quote again.`;
+
 const HINTS_BY_CODE: Readonly<Record<string, string>> = {
-    insufficient_balance: `The balance is too low for this total. A person can add funds at ${DASHBOARD}, or send BTC to the deposit address from coronium_get_crypto_balance and pay with funding_source btc once it confirms. Then quote again.`,
-    insufficient_funds: `The balance is too low for this total. A person can add funds at ${DASHBOARD}, or send BTC to the deposit address from coronium_get_crypto_balance and pay with funding_source btc once it confirms. Then quote again.`,
+    insufficient_balance: LOW_BALANCE_HINT,
+    insufficient_funds: LOW_BALANCE_HINT,
+    card_declined: `Nothing was charged: the card was declined. Ask the user for another saved card from coronium_get_credit_cards, or to pay at ${DASHBOARD}. Never retry the same card automatically.`,
+    nothing_to_move: "Nothing was moved: the crypto wallets hold less than $1 that can be moved. Deposit to the address from coronium_get_crypto_balance, wait for it to confirm, then preview the move again.",
     out_of_stock: "That plan just sold out. Call coronium_list_free_modems for live counts and coronium_list_tariffs for plans in stock.",
     no_stock: "That plan just sold out. Call coronium_list_free_modems for live counts and coronium_list_tariffs for plans in stock.",
     duplicate_request: "This idempotency key was already used. Reconcile with coronium_get_payment_status or coronium_get_proxies; never buy again with a new key.",

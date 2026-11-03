@@ -13,6 +13,7 @@
   "coronium_get_pool_stock",
   "coronium_get_proxies",
   "coronium_get_proxy",
+  "coronium_get_proxy_connection",
   "coronium_get_proxy_health",
   "coronium_get_renewal_quote",
   "coronium_get_rotation_status",

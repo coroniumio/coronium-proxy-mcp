@@ -18,6 +18,7 @@ export const DIRECTORY_TOOLS: ReadonlySet<string> = new Set([
     "coronium_get_balance",
     "coronium_get_proxies",
     "coronium_get_proxy",
+    "coronium_get_proxy_connection",
     "coronium_get_proxy_health",
     "coronium_test_modem",
     "coronium_rotate_modem",
@@ -39,15 +40,22 @@ export const DIRECTORY_TOOLS: ReadonlySet<string> = new Set([
 // The buyer profile is the short path for an agent that buys and runs a few
 // dedicated proxies: catalog, quote, buy, payment status, the proxies it owns
 // and the everyday fixes. Same rule as the directory list: explicit names only.
-// The buy tool is listed here but still needs CORONIUM_ENABLE_SPENDING.
+// The money tools are listed here but still need CORONIUM_ENABLE_SPENDING.
 export const BUYER_TOOLS: ReadonlySet<string> = new Set([
     "coronium_get_capabilities",
     "coronium_list_tariffs",
     "coronium_list_free_modems",
     "coronium_quote_purchase",
+    "coronium_get_renewal_quote",
     "coronium_buy_modems_with_balance",
+    "coronium_buy_modems_with_card",
+    "coronium_renew_modems_with_balance",
+    "coronium_renew_modems_with_card",
+    "coronium_convert_crypto_to_credit",
     "coronium_get_payment_status",
+    "coronium_get_credit_cards",
     "coronium_get_proxies",
+    "coronium_get_proxy_connection",
     "coronium_test_modem",
     "coronium_rotate_modem",
     "coronium_get_rotation_status",

@@ -79,19 +79,19 @@ Run your own copy over HTTP with `npx -y -p coronium-proxy-mcp@2.3.0 coronium-pr
   ```
   Then run `/mcp`, select `plugin:coronium-mobile-proxies:coronium` and choose Authenticate. Details: [plugins/coronium-mobile-proxies](plugins/coronium-mobile-proxies#readme).
 - **Official MCP Registry**: `io.github.coroniumio/coronium-proxy-mcp` ([registry entry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.coroniumio/coronium-proxy-mcp)). Hosts that read the registry install the npm package `coronium-proxy-mcp`.
-- **npm**: `npx -y coronium-proxy-mcp@2.3.0` with the environment shown under [Connect](#connect).
+- **npm**: `npx -y coronium-proxy-mcp@2.4.0` with the environment shown under [Connect](#connect).
 - **Glama**: [glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp](https://glama.ai/mcp/servers/coroniumio/coronium-proxy-mcp).
 
 ## Tool profiles
 
 `CORONIUM_TOOL_PROFILE` decides which tools exist:
 
-- `directory` registers an explicit allowlist of 21 tools: balances (account credit, BTC and USDT), owned proxies with HTTP and SOCKS5 URLs, health, connectivity test, rotation and its status, replacement, OpenVPN profile, countries, plans and stock by country and carrier, renewal quotes, tickets (list, read, create, reply), webhook read, and capabilities. It has no login tool, no OS fingerprint tools, no wallet creation, and no buy, renew, top-up or cancel tools. `check_token` takes no token argument. This is the profile the Coronium Claude Code plugin uses.
-- `buyer` registers 12 tools for an agent that buys and runs a few dedicated proxies, 13 with spending on (the extra one is `buy_modems_with_balance`): plans, stock, `quote_purchase`, `buy_modems_with_balance` (only with spending on), payment status, owned proxies, test, rotate and rotation status, replace, balance, crypto balance and capabilities. No login tool and no token argument anywhere.
+- `directory` registers an explicit allowlist of 22 tools: balances (account credit, BTC and USDT), owned proxies with HTTP and SOCKS5 URLs, ready-to-use connection config (`get_proxy_connection`), health, connectivity test, rotation and its status, replacement, OpenVPN profile, countries, plans and stock by country and carrier, renewal quotes, tickets (list, read, create, reply), webhook read, and capabilities. It has no login tool, no OS fingerprint tools, no wallet creation, and no buy, renew, top-up or cancel tools. `check_token` takes no token argument. This is the profile the Coronium Claude Code plugin uses.
+- `buyer` registers 15 tools for an agent that buys and runs a few dedicated proxies, 20 with spending on: plans, stock, `quote_purchase`, `get_renewal_quote`, payment status, owned proxies, `get_proxy_connection`, test, rotate and rotation status, replace, balance, crypto balance, saved cards and capabilities. With spending on it adds `buy_modems_with_balance`, `buy_modems_with_card`, `renew_modems_with_balance`, `renew_modems_with_card` and `convert_crypto_to_credit`. No login tool and no token argument anywhere.
 - `full` (the default when unset) registers every non-money tool, including settings, webhooks, pool keys and the Coronium Node tools. The login tool is not included unless `CORONIUM_ENABLE_LOGIN_TOOL=1`.
 - `read-only` registers only tools that change nothing. `CORONIUM_READ_ONLY=true` is an alias.
 
-**Spending is off by default.** Money tools exist only when `CORONIUM_ENABLE_SPENDING=1` is set **and** the profile is `full` (buy, renew, pool purchase and top-up, cancel with refund) or `buyer` (buy only). Without both, they are not registered and the HTTP client refuses money calls on its own (`spending_disabled`). Otherwise you pay in the dashboard.
+**Spending is off by default.** Money tools exist only when `CORONIUM_ENABLE_SPENDING=1` is set **and** the profile is `full` (buy, renew, crypto to credit, pool purchase and top-up, cancel with refund) or `buyer` (buy, renew and crypto to credit). Without both, they are not registered and the HTTP client refuses money calls on its own (`spending_disabled`). Otherwise you pay in the dashboard.
 
 Tools are always listed in alphabetical order, so the list is the same in every session.
 
@@ -113,6 +113,8 @@ Tools are always listed in alphabetical order, so the list is the same in every 
 
 **Proxies and URLs.** `get_proxies` and `get_proxy` return `http_url` and `socks5_url`. When a proxy has separate HTTP and SOCKS5 logins, each URL uses its own login. Listing does not test a connection; `test_modem` runs the backend check and returns `ok:true` or `ok:false`.
 
+**Connection config.** `get_proxy_connection` returns, for one owned proxy: the HTTP and SOCKS5 URLs, `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` values and `export` lines, and snippets for curl, Python requests and httpx, Node undici and axios, Playwright, Puppeteer and Selenium (selenium-wire), plus country, carrier, expiry and the rotation link when the account has one. `protocol` picks the URL for env vars and URL snippets; browsers always use the HTTP endpoint. Every value comes from the account's proxy record; a missing one is null. The result is a secret.
+
 **Rotation.** `rotate_modem` (by ID, name or rotation token) and `restart_modem` return a `state`:
 
 - `done`: a new IP, in `ip`.
@@ -133,9 +135,9 @@ A `rotation_cooldown` error carries `retry_after_seconds`; wait that long. Anyon
 
 ### Funding, as it works today
 
-- A person adds account credit in the dashboard at dashboard.coronium.io (card or crypto). This MCP cannot add funds.
-- BTC: `get_crypto_balance` returns the account's BTC deposit address. Once a deposit confirms, buy or renew with `funding_source: "btc"`. It is marked as a write, not a read: the backend creates a missing deposit wallet on that call. For a pure balance read use `get_balance`.
-- The USDT balance is shown but is not a way to pay through this MCP.
+- A person adds account credit or a card in the dashboard at dashboard.coronium.io.
+- Saved card: `get_credit_cards` lists saved cards (brand, last4, expiry). Pass a card's `_id` as `card_id` to `buy_modems_with_card` or `renew_modems_with_card`. If the bank asks the cardholder to authenticate (`card_authentication_required`) or declines (`card_declined`), nothing was charged; the person pays in the dashboard or picks another card. The tool never retries.
+- Own crypto: `get_crypto_balance` returns the USDT (TRC-20) and BTC deposit addresses. After a deposit confirms, `convert_crypto_to_credit` moves it into USD account credit (one way): first with `dry_run: true` to preview, then, after a yes, with `confirm: true` and a new `idempotency_key`. Then buy or renew with `funding_source: "account_credit"`. A confirmed BTC balance can also pay directly with `funding_source: "btc"`. `get_crypto_balance` is marked as a write, not a read: the backend creates a missing deposit wallet on that call. For a pure balance read use `get_balance`.
 - Want to try the service first? Buy one paid 1-day plan.
 - Refunds go back to the account balance.
 
@@ -143,15 +145,15 @@ A `rotation_cooldown` error carries `retry_after_seconds`; wait that long. Anyon
 
 1. `list_tariffs` or `list_free_modems` to see plans and live stock.
 2. `quote_purchase` with the plan and quantity. It checks stock and returns `total_usd`. For units with TCP fingerprint (p0f) control add `require: ["p0f"]`; the quote then also checks the plan's p0f count.
-3. `get_balance`, then show the person the plan, quantity, funding source and total. Wait for a clear yes for that exact amount.
-4. `buy_modems_with_balance` with `confirm: true`, `expected_total_usd` set to the quoted total, the same `require` as the quote, and one new UUID `idempotency_key`.
+3. `get_balance` (or `get_credit_cards` to pay by card), then show the person the plan, quantity, funding source and total. Wait for a clear yes for that exact amount.
+4. `buy_modems_with_balance` (or `buy_modems_with_card` with `card_id`) with `confirm: true`, `expected_total_usd` set to the quoted total, the same `require` as the quote, and one new UUID `idempotency_key`.
 5. The receipt carries `payment_id`. On HTTP 202 (`pending: true`) or the error `payment_delivery_unconfirmed`, poll `get_payment_status` with that `payment_id` and check `get_proxies`. Activation usually takes a few minutes. Never order again.
 
 ### Money tools (spending enabled)
 
-- Every money tool needs `confirm:true`, a UUID `idempotency_key` per approved intent, and the approved amount. Buy and renew also need an explicit `funding_source` (`account_credit` or `btc`; no default).
+- Every money tool needs `confirm:true`, a UUID `idempotency_key` per approved intent, and the approved amount. Balance buy and renew also need an explicit `funding_source` (`account_credit` or `btc`; no default); the card tools need `card_id`. `convert_crypto_to_credit` previews with `dry_run: true` and needs `confirm` and a key only for the real move.
 - `expected_total_usd`: the tool re-reads the live price (plan price and coupon, renewal quote, or pool plan price) right before sending and refuses with `price_changed` when the total differs from the approved one, higher or lower. Buy and renew also send it to the server as `max_total_usd`, so the server refuses (HTTP 409 `price_changed`, nothing charged, `details.quote` holds its current figure) when its total is higher. Neither is a price lock. After `price_changed`, quote again, ask again, and use a new `idempotency_key` for the newly approved total.
-- `idempotency_key` is sent as the `Idempotency-Key` header on every buy and renew.
+- `idempotency_key` is sent as the `Idempotency-Key` header on every buy, renew and crypto move. A repeat call with a key the account already sent (within 24 hours, in the same server process) skips the pre-checks and returns the first receipt, or the first error, with `replay: true`. It never charges again, even when the first call bought the last unit in stock. The same key with a different payload is refused (`idempotency_conflict`).
 - `cancel_modem` needs `min_refund_usd`. It re-runs the refund preview and refuses with `refund_changed` when the refund is now lower.
 - A coupon that gives no discount is refused (`coupon_invalid`) instead of being charged at full price.
 - `require: ["p0f"]` buys only units with p0f control and is refused before any charge (`p0f_unavailable`) when the plan has too few. `want_p0f: true` is a deprecated alias for it.
@@ -173,7 +175,8 @@ Every name begins with `coronium_`. "buyer" and "directory" mark the tools in th
 - `coronium_archive_ticket` (write). Required: `ticket_id`, `confirm`.
 - `coronium_build_pool_proxy_url` (write). Required: `id`.
 - `coronium_build_saved_pool_session_url` (write). Required: `id`.
-- `coronium_buy_modems_with_balance` (spends money, needs CORONIUM_ENABLE_SPENDING=1, buyer). Required: `tariff_id`, `quantity`, `funding_source`, `expected_total_usd`, `confirm`, `idempotency_key`.
+- `coronium_buy_modems_with_balance` (spends money, needs CORONIUM_ENABLE_SPENDING=1, buyer). Required: `tariff_id`, `quantity`, `expected_total_usd`, `confirm`, `idempotency_key`, `funding_source`.
+- `coronium_buy_modems_with_card` (spends money, needs CORONIUM_ENABLE_SPENDING=1, buyer). Required: `tariff_id`, `quantity`, `expected_total_usd`, `confirm`, `idempotency_key`, `card_id`.
 - `coronium_buy_pool_with_balance` (spends money, needs CORONIUM_ENABLE_SPENDING=1). Required: `tariff_id`, `expected_total_usd`, `confirm`, `idempotency_key`.
 - `coronium_cancel_modem` (cancels with refund, needs CORONIUM_ENABLE_SPENDING=1). Required: `proxy`, `min_refund_usd`, `confirm`.
 - `coronium_cancel_pool_key` (cancels with refund, needs CORONIUM_ENABLE_SPENDING=1). Required: `id`, `confirm`, `idempotency_key`.
@@ -181,13 +184,14 @@ Every name begins with `coronium_`. "buyer" and "directory" mark the tools in th
 - `coronium_check_coupon` (read). Required: `code`.
 - `coronium_check_token` (read, directory). Required: none.
 - `coronium_close_pool_session` (write). Required: `confirm`.
+- `coronium_convert_crypto_to_credit` (spends money, needs CORONIUM_ENABLE_SPENDING=1, buyer). Required: none.
 - `coronium_create_ticket` (write, directory). Required: `subject`, `message`, `confirm`.
 - `coronium_delete_saved_pool_session` (write). Required: `id`, `confirm`.
 - `coronium_delete_webhook` (write). Required: `confirm`.
 - `coronium_get_account` (read, directory). Required: none.
 - `coronium_get_balance` (read, buyer, directory). Required: none.
 - `coronium_get_capabilities` (read, buyer, directory). Required: none.
-- `coronium_get_credit_cards` (read). Required: none.
+- `coronium_get_credit_cards` (read, buyer). Required: none.
 - `coronium_get_crypto_balance` (write, buyer). Required: none.
 - `coronium_get_low_balance_threshold` (read). Required: none.
 - `coronium_get_openvpn_config` (write, directory). Required: `proxy`.
@@ -198,8 +202,9 @@ Every name begins with `coronium_`. "buyer" and "directory" mark the tools in th
 - `coronium_get_pool_stock` (read). Required: none.
 - `coronium_get_proxies` (read, buyer, directory). Required: none.
 - `coronium_get_proxy` (read, directory). Required: `proxy`.
+- `coronium_get_proxy_connection` (read, buyer, directory). Required: `modem_id`.
 - `coronium_get_proxy_health` (read, directory). Required: none.
-- `coronium_get_renewal_quote` (read, directory). Required: `modems`.
+- `coronium_get_renewal_quote` (read, buyer, directory). Required: `modems`.
 - `coronium_get_rotation_status` (read, buyer, directory). Required: `proxy`.
 - `coronium_get_speed_test` (read). Required: `proxy`.
 - `coronium_get_subscriptions` (read). Required: none.
@@ -218,7 +223,8 @@ Every name begins with `coronium_`. "buyer" and "directory" mark the tools in th
 - `coronium_logout` (opt-in, needs CORONIUM_ENABLE_LOGIN_TOOL=1). Required: none.
 - `coronium_preview_modem_cancellation` (read). Required: `proxy`.
 - `coronium_quote_purchase` (read, buyer). Required: `tariff_id`, `quantity`.
-- `coronium_renew_modems_with_balance` (spends money, needs CORONIUM_ENABLE_SPENDING=1). Required: `modems`, `funding_source`, `expected_total_usd`, `confirm`, `idempotency_key`.
+- `coronium_renew_modems_with_balance` (spends money, needs CORONIUM_ENABLE_SPENDING=1, buyer). Required: `modems`, `funding_source`, `expected_total_usd`, `confirm`, `idempotency_key`.
+- `coronium_renew_modems_with_card` (spends money, needs CORONIUM_ENABLE_SPENDING=1, buyer). Required: `modems`, `card_id`, `expected_total_usd`, `confirm`, `idempotency_key`.
 - `coronium_replace_modem` (write, buyer, directory). Required: `proxy`, `confirm`.
 - `coronium_reply_to_ticket` (write, directory). Required: `ticket_id`, `message`, `confirm`.
 - `coronium_restart_modem` (write). Required: `proxy`, `confirm`.
