@@ -1,3 +1,4 @@
+import {isIP} from "node:net";
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {z} from "zod";
 import {api} from "../api-client.js";
@@ -5,22 +6,34 @@ import {config} from "../config.js";
 import {proxyField, resolveProxyId} from "../proxies.js";
 import {confirmation, registerTool} from "../tool.js";
 
-// Routes that only Coronium Node rentals support. Other proxies answer 404.
+// Used for the usage, speed test and profile controls specific to Node rentals.
 const NODE_ONLY = "Only Coronium Node rentals support this; other proxies answer 404.";
 
-const ipAddress = z.string().ip();
+function validWhitelistEntry(input: string): boolean {
+    const [address, prefix, extra] = input.split("/");
+    const family = isIP(address);
+    if (!family || extra !== undefined) return false;
+    if (prefix === undefined) return true;
+    if (!/^\d{1,3}$/.test(prefix)) return false;
+    const bits = Number(prefix);
+    return family === 4 ? bits >= 24 && bits <= 32 : bits >= 48 && bits <= 128;
+}
+
+const whitelistEntry = z.string().max(64).trim().refine(validWhitelistEntry, {
+    message: "Enter an IP address or a CIDR range (IPv4 /24 to /32, IPv6 /48 to /128).",
+});
 
 export function registerNodeTools(server: McpServer): void {
     registerTool(server, "coronium_set_white_list", {
-        description: `Replace the list of client IPs allowed to use an owned proxy without a password. An empty list removes all entries. ${NODE_ONLY}`,
-        input: {proxy: proxyField, white_list: z.array(ipAddress).max(100), confirm: confirmation},
+        description: "Replace the whitelist on an owned proxy that advertises proxyEndpoints.capabilities.whitelist or features.whitelist.available. Send up to 10 addresses or CIDR ranges (IPv4 /24 to /32, IPv6 /48 to /128). An empty list clears it.",
+        input: {proxy: proxyField, white_list: z.array(whitelistEntry).max(10), confirm: confirmation},
         access: "write", destructive: true, idempotent: true,
         routes: ["GET /account/proxies", "PUT /modems/:modem_id/set-white-list"],
         run: async ({proxy, white_list}) => ({response: await api.put(`/modems/${await resolveProxyId(proxy)}/set-white-list`, {white_list})}),
     });
     registerTool(server, "coronium_get_usage", {
-        description: `Read traffic usage for an owned proxy over the last N days. ${NODE_ONLY}`,
-        input: {proxy: proxyField, days: z.number().int().min(1).max(90).optional()},
+        description: `Read traffic usage for the current rental over the last 1 to 366 days (default 30). ${NODE_ONLY}`,
+        input: {proxy: proxyField, days: z.number().int().min(1).max(366).optional()},
         routes: ["GET /account/proxies", "GET /modems/:modem_id/usage"],
         run: async ({proxy, days}) => ({response: await api.get(`/modems/${await resolveProxyId(proxy)}/usage`, days === undefined ? undefined : {days})}),
     });

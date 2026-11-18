@@ -2026,7 +2026,7 @@
     {
       "name": "coronium_get_renewal_quote",
       "title": "Get renewal quote",
-      "description": "Get the backend's USD renewal quote for owned proxies (1-90 days each). Refuses partial quotes. Spends nothing and changes nothing. Quotes are not price locks. Payment happens in the dashboard unless spending is enabled in this MCP.",
+      "description": "Get the backend's USD renewal quote for owned proxies (1-90 days each). Refuses partial quotes. Show any warnings[].message for its modem_id before asking for approval. Spends nothing and changes nothing. Quotes are not price locks. Payment happens in the dashboard unless spending is enabled in this MCP.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2282,7 +2282,7 @@
     {
       "name": "coronium_get_usage",
       "title": "Get usage",
-      "description": "Read traffic usage for an owned proxy over the last N days. Only Coronium Node rentals support this; other proxies answer 404.",
+      "description": "Read traffic usage for the current rental over the last 1 to 366 days (default 30). Only Coronium Node rentals support this; other proxies answer 404.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2295,7 +2295,7 @@
           "days": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 90
+            "maximum": 366
           }
         },
         "required": [
@@ -3915,7 +3915,7 @@
     {
       "name": "coronium_set_white_list",
       "title": "Set white list",
-      "description": "Replace the list of client IPs allowed to use an owned proxy without a password. An empty list removes all entries. Only Coronium Node rentals support this; other proxies answer 404.",
+      "description": "Replace the whitelist on an owned proxy that advertises proxyEndpoints.capabilities.whitelist or features.whitelist.available. Send up to 10 addresses or CIDR ranges (IPv4 /24 to /32, IPv6 /48 to /128). An empty list clears it.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -3929,16 +3929,9 @@
             "type": "array",
             "items": {
               "type": "string",
-              "anyOf": [
-                {
-                  "format": "ipv4"
-                },
-                {
-                  "format": "ipv6"
-                }
-              ]
+              "maxLength": 64
             },
-            "maxItems": 100
+            "maxItems": 10
           },
           "confirm": {
             "type": "boolean",

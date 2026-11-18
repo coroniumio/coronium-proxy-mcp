@@ -896,6 +896,27 @@ for (const [name, args, method, path] of [
     ['revoke_openvpn', {proxy: ids.modem, confirm: true}, 'POST', `/modems/${ids.modem}/openvpn/revoke`],
 ]) test(`Node route forwarding: ${name}`, async () => { data(await call(name, args)); assert.equal(last(path).method, method); });
 
+test('whitelist accepts allowed IPv4 and IPv6 ranges, preserves clears and rejects oversized writes', async () => {
+    const path = `/modems/${ids.modem}/set-white-list`;
+    for (const entries of [[], ['198.51.100.0/24', '2001:db8::/48', '2001:db8::41']]) {
+        data(await call('set_white_list', {proxy: ids.modem, white_list: entries, confirm: true}));
+        assert.deepEqual(last(path).body.white_list, entries);
+    }
+    const before = requests.length;
+    for (const entries of [Array(11).fill('198.51.100.1'), ['198.51.100.0/23'], ['2001:db8::/47'], ['not-an-address'], ['198.51.100.1/32/24']]) {
+        error(await call('set_white_list', {proxy: ids.modem, white_list: entries, confirm: true}));
+    }
+    assert.equal(requests.length, before);
+});
+
+test('usage forwards the full 366-day window and refuses longer requests', async () => {
+    data(await call('get_usage', {proxy: ids.modem, days: 366}));
+    assert.equal(last(`/modems/${ids.modem}/usage`).query.days, '366');
+    const before = requests.length;
+    error(await call('get_usage', {proxy: ids.modem, days: 367}));
+    assert.equal(requests.length, before);
+});
+
 test('public files carry no internal details, long dashes or non-public contact addresses', () => {
     const files = ['README.md', 'CHANGELOG.md', 'llms.txt', 'AGENTS.md', 'docs/backend-contract.md', '.env.example', 'package.json', 'test/fixtures/v3-routes.json', ...['api-client', 'config', 'connection', 'errors', 'formatters', 'mcp-server', 'profiles', 'proxies', 'rotation', 'tool', 'token-store'].map(name => `src/${name}.ts`), ...['account', 'auth', 'node', 'pool', 'proxies', 'shop', 'tickets'].map(name => `src/tools/${name}.ts`)];
     for (const file of files) {

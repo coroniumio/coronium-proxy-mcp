@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Whitelist updates accept up to ten IP addresses or supported CIDR ranges on eligible lines. Usage accepts periods up to 366 days. Renewal quote guidance includes line warnings.
+
 ## 2.4.3 - 2026-11-03
 
 Description and docs corrections. No tool was added, removed or renamed; only the `coronium_convert_crypto_to_credit` description changed. Profile counts are unchanged: directory 22, buyer 15 or 20 with spending on, read-only 32, full 60 or 69 with spending on, plus `coronium_create_account` in the local buyer and full profiles while no token or login is set.

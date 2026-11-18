@@ -249,7 +249,7 @@ function registerCatalogTools(server: McpServer): void {
         },
     });
     registerTool(server, "coronium_get_renewal_quote", {
-        description: "Get the backend's USD renewal quote for owned proxies (1-90 days each). Refuses partial quotes. Spends nothing and changes nothing. Quotes are not price locks. Payment happens in the dashboard unless spending is enabled in this MCP.",
+        description: "Get the backend's USD renewal quote for owned proxies (1-90 days each). Refuses partial quotes. Show any warnings[].message for its modem_id before asking for approval. Spends nothing and changes nothing. Quotes are not price locks. Payment happens in the dashboard unless spending is enabled in this MCP.",
         input: renewalFields, routes: ["POST /payment/renewal-quote"],
         run: async ({modems, coupon}) => ({quote: await renewalQuote(modems, coupon)}),
     });
