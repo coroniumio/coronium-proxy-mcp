@@ -215,7 +215,7 @@ function registerCatalogTools(server: McpServer): void {
         },
     });
     registerTool(server, "coronium_list_free_modems", {
-        description: "Read aggregate stock counts by country, carrier and region, optionally filtered by country and carrier. Counts are snapshots, not reservations or connectivity tests.",
+        description: "Read aggregate stock counts by country, carrier and region, optionally filtered by country and carrier. Counts are snapshots, not reservations or connectivity tests. Each row has count and p0f_count, and since API 3.3.16 openvpn_count, ipv6_count and one_time_only_count: how many of count can serve OpenVPN, were last observed on native IPv6, or are one-time rentals that are never sold with auto-renew (never more than count). A row may carry dataAllowanceNote {gbPerMonth, text, count, all}. The buy tools in this server do not pick a region, so promise OpenVPN or native IPv6 only when every row for that carrier has openvpn_count or ipv6_count equal to count. Re-read right before buying.",
         input: {country_code: countrySchema.optional(), carrier_id: idSchema.optional()}, routes: ["GET /free-modems", "GET /countries"],
         run: async ({country_code, carrier_id}) => {
             const [stockResponse, countriesResponse] = await Promise.all([api.publicGet("/free-modems"), api.publicGet("/countries")]);
