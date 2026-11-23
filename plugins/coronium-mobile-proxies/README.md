@@ -34,6 +34,8 @@ Prefer a local server with an API token instead of the browser sign-in? Run the 
 
 Rotation waits for the carrier to hand out a new IP, which can take a minute or more. If Claude Code reports a tool timeout, start it with a longer limit, for example `MCP_TOOL_TIMEOUT=200000 claude`.
 
+If you want to pay with your Stripe Link wallet, use the separate [MPP checkout guide](https://www.coronium.io/blog/buy-a-mobile-proxy-with-stripe-mpp). This plugin can look up plans. Your wallet client requests approval for a specific rental and price.
+
 ## Example prompts
 
 - "Which of my Coronium proxies are unhealthy right now?"
