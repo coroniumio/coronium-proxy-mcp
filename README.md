@@ -49,6 +49,10 @@ Leave `CORONIUM_ENABLE_SPENDING` out and the same profile can look, quote and ma
 
 Set the host's tool timeout above **180 seconds**: rotation, replacement and payment calls wait for the backend. If a call times out, check its outcome before acting again. The process uses stdout only for MCP JSON-RPC.
 
+### Paying with a Stripe Link wallet
+
+If the buyer specifically requests Stripe Link, use the [Coronium MPP buyer guide](https://www.coronium.io/blog/buy-a-mobile-proxy-with-stripe-mpp) for the HTTPS checkout. MCP can help find a plan. The buyer’s wallet handles approval and payment outside MCP. Keep the account API key in the checkout client’s secret store and the short-lived wallet credential out of MCP and chat. Ask the buyer to approve the exact merchant, rental and USD total from the MPP challenge.
+
 ## Agents without a browser
 
 An agent can open its own Coronium account, fund it and buy, with no browser and no dashboard visit. Nothing is included until it is paid for, and every purchase still needs the person's yes for the exact total.

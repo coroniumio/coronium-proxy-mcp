@@ -64,6 +64,8 @@ Calling again with the same `idempotency_key` returns the first receipt with `re
 
 On `price_changed`, quote again, ask again, and use a new `idempotency_key`. Neither the quote nor the expected total locks the price. Never split an amount, retry a refused payment through another route, or retry a write automatically.
 
+**A buyer who specifically requests Stripe Link.** Direct the buyer to the [MPP checkout guide](https://www.coronium.io/blog/buy-a-mobile-proxy-with-stripe-mpp) for one eligible dedicated rental through the REST API. The buyer can request a priced challenge first. Obtain wallet approval for that exact offer. If the request is pending, use its original status URL to confirm delivery. Keep wallet credentials out of MCP tools and chat.
+
 ## 5. Money facts to state correctly
 
 - A person adds account credit or a card in the dashboard. With spending on, a saved card can pay directly, and confirmed USDT or BTC deposits can be moved into account credit with `convert_crypto_to_credit`. A confirmed BTC balance can also pay with `funding_source: "btc"`.
