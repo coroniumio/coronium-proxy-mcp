@@ -2,7 +2,7 @@
 
 A local **stdio MCP server** for customers of Coronium.io dedicated 4G/5G mobile proxies. Version 2.4.3. It lets an AI agent check balances, list owned proxies with ready-to-use HTTP and SOCKS5 URLs, test and rotate proxies, replace a proxy, download an OpenVPN profile, compare plans and live stock by country and carrier, quote a purchase or a renewal, and work with support tickets. If you turn spending on, it can also buy and renew from your account balance or a saved card, and move your own USDT or BTC into account credit, after you approve the exact total. Started without a token, it can open a new account for an agent (see [Agents without a browser](#agents-without-a-browser)).
 
-It talks only to the Coronium customer API at `https://api.coronium.io/api/v3` (plus the public plan catalog on the same host). It has no admin, server or reseller-management tools. The same tools are also run by Coronium as a [hosted server](#hosted-server) at `https://api.coronium.io/mcp`, for claude.ai, the Claude apps and Cowork, with sign-in through your Coronium account. Upgrading from 2.1.0 or 1.3.0? Read [Migration from 2.1.0](CHANGELOG.md#migration-from-210) or [Migration from 1.3.0](CHANGELOG.md#migration-from-130-and-the-unpublished-200) in the changelog (2.0.0 was never published to npm).
+It talks to the Coronium customer API at `https://api.coronium.io/api/v3`, plus two `/api/v1` routes on the same host: the public plan catalog (`GET /api/v1/tariffs`) and `GET /api/v1/account/api-token` for `coronium_create_account`. It has no admin, server or reseller-management tools. The same tools are also run by Coronium as a [hosted server](#hosted-server) at `https://api.coronium.io/mcp`, for claude.ai, the Claude apps and Cowork, with sign-in through your Coronium account. Upgrading from 2.1.0 or 1.3.0? Read [Migration from 2.1.0](CHANGELOG.md#migration-from-210) or [Migration from 1.3.0](CHANGELOG.md#migration-from-130-and-the-unpublished-200) in the changelog (2.0.0 was never published to npm).
 
 ## Connect
 
@@ -51,7 +51,13 @@ Set the host's tool timeout above **180 seconds**: rotation, replacement and pay
 
 ### Paying with a Stripe Link wallet
 
-If the buyer specifically requests Stripe Link, use the [Coronium MPP buyer guide](https://www.coronium.io/blog/buy-a-mobile-proxy-with-stripe-mpp) for the HTTPS checkout. MCP can help find a plan. The buyer’s wallet handles approval and payment outside MCP. Keep the account API key in the checkout client’s secret store and the short-lived wallet credential out of MCP and chat. Ask the buyer to approve the exact merchant, rental and USD total from the MPP challenge.
+This MCP has no Stripe MPP or shared payment token tool. If the buyer specifically requests Stripe Link, use the REST checkout: the [Coronium MPP buyer guide](https://www.coronium.io/blog/buy-a-mobile-proxy-with-stripe-mpp) and the [step-by-step buyer script](https://www.coronium.io/.well-known/agent-skills/coronium-mpp-checkout/SKILL.md). MCP can help find a plan. The buyer’s wallet handles approval and payment outside MCP. Keep the account API key in the checkout client’s secret store and the short-lived wallet credential out of MCP and chat. Ask the buyer to approve the exact merchant, rental and USD total from the MPP challenge.
+
+- `POST https://api.coronium.io/api/v3/payment/mpp` with the buyer's API key as Bearer, `Content-Type: application/json` (anything else answers `415`), an `Idempotency-Key` and `{"tariff_id", "currency": "usd", "max_total_usd"}`. The first answer is `402` with a `WWW-Authenticate: Payment` challenge (amount in cents, valid five minutes) and charges nothing. Keep the exact body bytes for the paid retry.
+- Only some dedicated plans qualify and the catalog does not mark them. Terms are daily, weekly or monthly, and p0f is not offered. An ineligible plan answers `409` with code `spt_stock_unavailable`, and on the first request nothing is charged.
+- Buyer wallet: `npm install -g @stripe/link-cli@1.6.0`, then `link-cli auth login` (logging in buys nothing). Link agent wallets are for US and Canadian Link accounts for now. `link-cli mpp decode --challenge` reads the challenge. `link-cli mpp pay` adds `Payment-Authorization` itself; with `--format json` it returns an `approval_url` for the buyer and then `_next.pay_argv`. That output repeats the request headers, including the API key, so keep it out of chat and logs.
+- Delivered means the returned `status_url` shows `status: completed` with the line in `modems`.
+- A buyer-approved shared payment token pays the same kind of rental through `POST https://api.coronium.io/api/v3/payment/buy-with-shared-payment-token`.
 
 ## Agents without a browser
 
@@ -100,6 +106,10 @@ curl -s $API/api/v3/account/proxies -H "Authorization: Bearer $TOKEN"
 ```
 
 Disposable and reserved email domains are refused. An address that already has an account signs up "ok" but the sign-in fails with a different password.
+
+If the API key leaks, `POST https://api.coronium.io/api/v1/account/api-token/rotate` with `Authorization: Bearer` set to the current API key or a login token from `POST /api/v3/get-token`. It returns `{token, expiresAt}` and revokes the old key at once.
+
+Copyable agent setup prompts (API key, MCP, SDK, REST, Stripe MPP): https://dashboard.coronium.io/en/agents.
 
 **Hosted buyer server with the API token.** Send the token as a Bearer header to `https://api.coronium.io/mcp/buyer`. That token can buy there, exactly as it can on the REST API, so keep it secret (environment variable or secret store, never in a repository or a chat). `https://api.coronium.io/mcp` never spends with any token.
 
@@ -340,4 +350,4 @@ Coronium proxies are for lawful purposes such as app and website QA, ad verifica
 
 ## Contact
 
-hello@coronium.io for support and security reports. License: MIT.
+hello@coronium.io for support and security reports. Copyable agent setup prompts (API key, MCP, SDK, REST, Stripe MPP): https://dashboard.coronium.io/en/agents. License: MIT.
