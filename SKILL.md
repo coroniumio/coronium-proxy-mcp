@@ -19,7 +19,7 @@ Pick one. The hosted server needs nothing installed.
 | Any MCP host (local) | `npx -y coronium-proxy-mcp@2.4.3` with `CORONIUM_API_TOKEN` and `CORONIUM_TOOL_PROFILE` set (Node.js 20+). Without a token, `buyer` and `full` offer `coronium_create_account`. |
 | Agent with an API token, no browser | Hosted `https://api.coronium.io/mcp/buyer` with the header `Authorization: Bearer <api token>`. Claude Code: `claude mcp add --transport http coronium-buyer https://api.coronium.io/mcp/buyer --header "Authorization: Bearer $CORONIUM_API_TOKEN"`. |
 
-- **No account yet (agents without a browser).** Run the local server with the `buyer` profile and no token (add `CORONIUM_ENABLE_SPENDING=1` to buy): `coronium_create_account` (email, name, optional purpose and password) signs up, signs in and issues an API token that the session then uses. It returns the token once, and a generated password once; store them in a secret store. Over REST the same is `POST /api/v3/signup`, `POST /api/v3/get-token`, then `GET /api/v1/account/api-token` with the session token (`{token, expiresAt}`, valid 365 days). A verification email is sent; nothing waits for it. Disposable and reserved email domains are refused; `account_exists` means the address already has an account. A new account is empty: nothing is included until paid. Full curl walk-through: README, "Agents without a browser".
+- **No account yet (agents without a browser).** Run the local server with the `buyer` profile and no token (add `CORONIUM_ENABLE_SPENDING=1` to buy): `coronium_create_account` (email, name, optional purpose and password) signs up, signs in and issues an API token that the session then uses. It returns the token once, and a generated password once; store them in a secret store. Over REST the same is `POST /api/v3/signup`, `POST /api/v3/get-token`, then `GET /api/v1/account/api-token` with the session token (`{token, expiresAt}`, valid 365 days). A verification email is sent; nothing waits for it. Disposable and reserved email domains are refused; `account_exists` means the address already has an account. A new account is empty: nothing is included until paid. Full curl walk-through: README, "Agents without a browser". If the API key leaks, `POST https://api.coronium.io/api/v1/account/api-token/rotate` with `Authorization: Bearer` set to the current API key or a login token from `POST /api/v3/get-token`. It returns `{token, expiresAt}` and revokes the old key at once.
 - The API token comes from dashboard.coronium.io, Account, API Access, or from `coronium_create_account`. Keep it in the host's secret store. Never ask the person to paste it into the conversation.
 - Set the host's tool timeout above 180 seconds. Rotation, replacement and payments wait for the backend. If a call times out, check the outcome before acting again.
 
@@ -64,7 +64,7 @@ Calling again with the same `idempotency_key` returns the first receipt with `re
 
 On `price_changed`, quote again, ask again, and use a new `idempotency_key`. Neither the quote nor the expected total locks the price. Never split an amount, retry a refused payment through another route, or retry a write automatically.
 
-**A buyer who specifically requests Stripe Link.** Direct the buyer to the [MPP checkout guide](https://www.coronium.io/blog/buy-a-mobile-proxy-with-stripe-mpp) for one eligible dedicated rental through the REST API. The buyer can request a priced challenge first. Obtain wallet approval for that exact offer. If the request is pending, use its original status URL to confirm delivery. Keep wallet credentials out of MCP tools and chat.
+**A buyer who specifically requests Stripe Link.** This MCP has no tool for it. Direct the buyer to the [MPP checkout guide](https://www.coronium.io/blog/buy-a-mobile-proxy-with-stripe-mpp) and the [step-by-step buyer script](https://www.coronium.io/.well-known/agent-skills/coronium-mpp-checkout/SKILL.md) for one eligible dedicated rental through the REST API (`POST /api/v3/payment/mpp`). The buyer can request a priced challenge first: `402`, nothing charged. Only some dedicated plans qualify and the catalog does not mark them; an ineligible plan answers `409 spt_stock_unavailable` and charges nothing. p0f is not offered there. The buyer's wallet tool is `npm install -g @stripe/link-cli@1.6.0` (US and Canadian Link accounts only for now). Obtain wallet approval for that exact offer. If the request is pending, use its original status URL to confirm delivery: `status: completed` with the line in `modems`. Keep wallet credentials out of MCP tools and chat.
 
 ## 5. Money facts to state correctly
 
@@ -92,6 +92,10 @@ Errors set `isError:true` and carry `error.code` (lowercase), `message` and `rec
 ## Links
 
 - Docs for agents: https://www.coronium.io/llms.txt and https://www.coronium.io/llms-full.txt
+- Full agent manual: https://dashboard.coronium.io/SKILL.md
+- Copyable agent setup prompts (API key, MCP, SDK, REST, Stripe MPP): https://dashboard.coronium.io/en/agents
+- Hosted MCP: https://api.coronium.io/mcp (directory, never spends) and https://api.coronium.io/mcp/buyer (buyer)
+- Stripe MPP buyer script: https://www.coronium.io/.well-known/agent-skills/coronium-mpp-checkout/SKILL.md
 - API: https://api.coronium.io/openapi.json
 - Reseller kit (white-label resale): https://github.com/bolivian-peru/coronium-reseller-kit
 - Repository and full tool catalog: https://github.com/coroniumio/coronium-proxy-mcp
