@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `coronium_list_free_modems` description names the per-row counts the API adds in OpenAPI 3.3.16: `openvpn_count`, `ipv6_count` and `one_time_only_count` next to `count` and `p0f_count`, plus the existing `dataAllowanceNote`. The tool already passed every row field through; only the description and `docs/tool-catalog.json` changed. It also says that the buy tools pick no region, so OpenVPN or native IPv6 can be promised only when every row for the carrier has it. README, SKILL.md and llms.txt say the same. No tool was added, removed or renamed.
 - Whitelist updates accept up to ten IP addresses or supported CIDR ranges on eligible lines. Usage accepts periods up to 366 days. Renewal quote guidance includes line warnings.
 
 ## 2.4.3 - 2026-11-03
