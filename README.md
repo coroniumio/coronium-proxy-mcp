@@ -232,9 +232,78 @@ A `rotation_cooldown` error carries `retry_after_seconds`; wait that long. Anyon
 - `idempotency_key` is sent as the `Idempotency-Key` header on every buy, renew and crypto move. A repeat call with a key the account already sent (within 24 hours, in the same server process) skips the pre-checks and returns the first receipt, or the first error, with `replay: true`. It never charges again, even when the first call bought the last unit in stock. The same key with a different payload is refused (`idempotency_conflict`). The key is 8 to 128 characters of letters, digits, `-` and `_` (a UUID fits); the API answers HTTP 400 "Invalid Idempotency-Key format" to any other key on the buy, renew and crypto-move routes.
 - `cancel_modem` needs `min_refund_usd`. It re-runs the refund preview and refuses with `refund_changed` when the refund is now lower.
 - A coupon that gives no discount is refused (`coupon_invalid`) instead of being charged at full price.
-- `require: ["p0f"]` buys only units with p0f control and is refused before any charge (`p0f_unavailable`) when the plan has too few. `want_p0f: true` is a deprecated alias for it.
+- `require: ["p0f"]` buys only units with p0f control and is refused before any charge (`p0f_unavailable`) when the plan has too few. `want_p0f: true` is a deprecated alias for it. The MCP buy and quote tools do not accept `"ipv6"` yet; buy IPv6 lines through the REST API (next section).
+- `list_free_modems` rows carry `count` and `p0f_count`, and since API 3.3.16 also `openvpn_count`, `ipv6_count` and `one_time_only_count` (integers, always present, never more than `count`): units that can serve OpenVPN, had native IPv6 checked through their own proxy port in the last 2 hours, or are one-time rentals never sold with auto-renew. Since API 3.3.18 rows also carry `p0f_ipv6_count` (both p0f and that IPv6 check). A row may carry `dataAllowanceNote` `{gbPerMonth, text, count, all}`. The MCP buy tools do not pick a region, so promise OpenVPN only when every row for that carrier has `openvpn_count` equal to `count`. Do not promise native IPv6 on an MCP buy: the buy tools accept only `require: ["p0f"]` for now, and IPv6 is guaranteed only on a REST buy with `require: ["ipv6"]` (see "Picking IPv6 lines" below). Counts are not a reservation: re-read right before buying. Per-region guarantees through the REST API (`region_id`): https://github.com/bolivian-peru/coronium-reseller-kit/blob/main/docs/stock-and-credentials.md#guaranteeing-features-per-region
 - Buy and renew results carry `payment_id`, `pending` and `next_step`; an error with a known payment carries `payment_id` too. Poll `get_payment_status` with it. Without one, reconcile with `get_payments` and `get_proxies`. `outcome:"unknown"` means check before acting; `outcome:"refunded_not_charged"` means nothing was charged.
 - No write is ever retried automatically. A payment key is bound to one payload for the process lifetime and concurrent identical calls share one request.
+
+### Picking IPv6 lines (REST API only for now)
+
+The API (3.3.18) can require native IPv6 on a buy; these MCP tools cannot send it yet. `list_free_modems` and `list_tariffs` already show the counts (`ipv6_count`, `p0f_ipv6_count`, `ip_stack.ipv6`, `features.ipv6`), because they pass every row field through.
+
+1. Read `GET /api/v3/free-modems` (or `list_free_modems`) and pick a `region_id` whose `ipv6_count` (`p0f_ipv6_count` when you also need p0f) covers the order.
+2. Buy through REST with `require`:
+
+```http
+POST /api/v3/payment/buy-with-account-credit
+Authorization: Bearer <API key>
+Content-Type: application/json
+Idempotency-Key: <new UUID>
+
+{"tariff_id": "651941cd5df31c2dd51f9e14", "modemCount": 1, "region_id": "68e1362859ceffb93de500e5",
+ "require": ["ipv6"], "max_total_usd": 99}
+```
+
+   REST answer `200` (account credit; example values). It has no IPv6 field: a `200` to a request with `require: ["ipv6"]` is the confirmation.
+
+```json
+{"result": "ok", "charged_usd": 99, "currency": "USD", "paymentId": "6a4e2c1f9b8d7e6f5a4b3c2d",
+ "data": [{"_id": "69e894e86f1f4736e92202d8", "name": "cor_US_5c75faff",
+           "proxy_login": "example_login", "proxy_password": "example_password",
+           "http_port": "8040", "socks_port": "5040", "ip_address": "203.0.113.7", "status": "active",
+           "rotation_interval": 0, "tariff_id": "651941cd5df31c2dd51f9e14",
+           "country_id": "64f0a1b2c3d4e5f60718293a", "carrier_id": "6515a3fa0a3b97dc8f2202d8",
+           "region_id": "68e1362859ceffb93de500e5", "tariff_expired_at": 1779404400000}],
+ "billing": {"schema_version": 1, "action": "purchase", "lane": "account_credit", "currency": "USD",
+             "line_items": [{"kind": "modem", "modem_id": null, "name": null,
+                             "tariff_id": "651941cd5df31c2dd51f9e14", "country_id": "64f0a1b2c3d4e5f60718293a",
+                             "carrier_id": "6515a3fa0a3b97dc8f2202d8", "plan": "month", "days": 30,
+                             "pricing_basis": "plan_fixed", "quantity": 1, "unit_price_usd": 99, "line_total_usd": 99}],
+             "subtotal_usd": 99, "discount": null, "charged_usd": 99,
+             "balance_before_usd": 500, "balance_after_usd": 401, "settlement": null}}
+```
+
+3. Handle `409 ipv6_unavailable`, sent before any charge. REST body for `require: ["ipv6"]`:
+
+```json
+{"error": "No IPv6-capable proxies are available for this selection right now. Nothing was charged.",
+ "code": "ipv6_unavailable", "suggested_action": "pick_region_with_ipv6_count_or_retry_later",
+ "retryable": false, "request_id": "req_3kq9v2LmT0s"}
+```
+
+   REST body for `require: ["p0f", "ipv6"]` (the code is `ipv6_unavailable` here too, not `p0f_unavailable`):
+
+```json
+{"error": "No IPv6-capable proxies with p0f are available for this selection right now. Nothing was charged.",
+ "code": "ipv6_unavailable", "suggested_action": "pick_region_with_ipv6_count_or_retry_later",
+ "retryable": false, "request_id": "req_3kq9v2LmT0s"}
+```
+
+   Pick another region or ask the person; do not loop. The Stripe Link (MPP) and shared payment token checkouts answer `409 ipv6_unavailable` to `require: ["ipv6"]` before any quote or charge.
+
+`replace_modem` on a line bought with `require: ["ipv6"]` gives a line with a fresh IPv6 check, or the error `ipv6_replacement_unavailable` with nothing changed (the tool wraps it in its own error shape). The API accepts `allow_without_ipv6: true` to take a line without IPv6; `replace_modem` does not send it yet. REST body:
+
+```json
+{"error": "No replacement with IPv6 is available right now. Your current proxy is unchanged. Try again later, or repeat the request with allow_without_ipv6: true to accept a replacement without IPv6.",
+ "code": "ipv6_replacement_unavailable", "changed": false,
+ "suggested_action": "retry_later_or_allow_without_ipv6", "retryable": false, "request_id": "req_3kq9v2LmT0s"}
+```
+
+The Coronium dashboard shows the "IPv6 native" badge only for lines with a fresh IPv6 check, and its "I need IPv6" tick sends the same requirement.
+
+Native IPv6 means the line reaches IPv6-only sites over its own mobile IPv6 address. What we guarantee: every line sold with `require: ["ipv6"]` passed that check through its own proxy port within the last 2 hours, and is checked again just before it is handed over when that check is more than 10 minutes old. What we cannot guarantee: the mobile carrier assigns the IPv6 address per session, so a rotation, restart or reconnect gives the line a new address, and whether it gets IPv6 again is the carrier's decision, not ours; we do not re-check sold lines on a schedule. Sites that offer both IPv4 and IPv6 may still be reached over IPv4. We have not verified OS fingerprint (p0f) control on IPv6 connections. Replacement honours the requirement: `/replace` on a line bought with `require: ["ipv6"]` gives a line with a fresh IPv6 check, or answers `409 ipv6_replacement_unavailable` and changes nothing. A paid order whose free lines all fail that final check waits as a delayed order until a line passes it; it is never filled with a line without IPv6.
+
+Full guide: https://github.com/bolivian-peru/coronium-reseller-kit/blob/main/docs/ipv6-lines.md
 
 ## Results and errors
 

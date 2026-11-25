@@ -224,7 +224,7 @@ export function registerProxyTools(server: McpServer): void {
         },
     });
     registerTool(server, "coronium_replace_modem", {
-        description: "Replace an owned proxy with a different one chosen by the backend (the carrier can differ). The new proxy has a new host and new credentials, and the old one is released. Each replacement uses one of the account's daily replacements (2 per rolling 24 hours by default; the backend refuses when none are left). Some rental types cannot be replaced (HTTP 409). Requires explicit authorization; never use it as automatic recovery or because a rotation is pending.",
+        description: "Replace an owned proxy with a different one chosen by the backend (the carrier can differ). The new proxy has a new host and new credentials, and the old one is released. Each replacement uses one of the account's daily replacements (2 per rolling 24 hours by default; the backend refuses when none are left). Some rental types cannot be replaced (HTTP 409). A p0f proxy (bought with p0f or with an OS set) or one bought with IPv6 required is replaced only by one that keeps it, otherwise the backend answers p0f_replacement_unavailable or ipv6_replacement_unavailable and nothing changes. Requires explicit authorization; never use it as automatic recovery or because a rotation is pending.",
         input: {proxy: proxyField, confirm: confirmation}, access: "write", destructive: true,
         routes: ["GET /account/proxies", "POST /modems/:modem_id/replace"],
         run: async ({proxy}) => {
