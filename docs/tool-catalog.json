@@ -352,7 +352,7 @@
               ]
             },
             "maxItems": 1,
-            "description": "Features every bought unit must have. [\"p0f\"] buys only units with TCP fingerprint (p0f) control; refused before any charge when the plan has too few of them."
+            "description": "Features every bought unit must have. [\"p0f\"] buys only units with TCP fingerprint (p0f) control; refused before any charge when the plan has too few of them. IPv6 cannot be required through this tool yet."
           },
           "want_p0f": {
             "type": "boolean",
@@ -470,7 +470,7 @@
               ]
             },
             "maxItems": 1,
-            "description": "Features every bought unit must have. [\"p0f\"] buys only units with TCP fingerprint (p0f) control; refused before any charge when the plan has too few of them."
+            "description": "Features every bought unit must have. [\"p0f\"] buys only units with TCP fingerprint (p0f) control; refused before any charge when the plan has too few of them. IPv6 cannot be required through this tool yet."
           },
           "want_p0f": {
             "type": "boolean",
@@ -2414,7 +2414,7 @@
     {
       "name": "coronium_list_free_modems",
       "title": "List free modems",
-      "description": "Read aggregate stock counts by country, carrier and region, optionally filtered by country and carrier. Counts are snapshots, not reservations or connectivity tests. Each row has count and p0f_count, and since API 3.3.16 openvpn_count, ipv6_count and one_time_only_count: how many of count can serve OpenVPN, were last observed on native IPv6, or are one-time rentals that are never sold with auto-renew (never more than count). A row may carry dataAllowanceNote {gbPerMonth, text, count, all}. The buy tools in this server do not pick a region, so promise OpenVPN or native IPv6 only when every row for that carrier has openvpn_count or ipv6_count equal to count. Re-read right before buying.",
+      "description": "Read aggregate stock counts by country, carrier and region, optionally filtered by country and carrier. Counts are snapshots, not reservations or connectivity tests. Each row has count and p0f_count, and since API 3.3.16 openvpn_count, ipv6_count and one_time_only_count: how many of count can serve OpenVPN, had native IPv6 checked through their own proxy port in the last 2 hours, or are one-time rentals that are never sold with auto-renew (never more than count). Since API 3.3.18 rows also carry p0f_ipv6_count (both p0f and that IPv6 check). A row may carry dataAllowanceNote {gbPerMonth, text, count, all}. The buy tools in this server do not pick a region, so promise OpenVPN only when every row for that carrier has openvpn_count equal to count. They cannot require IPv6 yet, so never promise native IPv6 on a buy made here; the REST API buys it with require [\"ipv6\"]. Re-read right before buying.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2897,7 +2897,7 @@
               ]
             },
             "maxItems": 1,
-            "description": "Features every bought unit must have. [\"p0f\"] buys only units with TCP fingerprint (p0f) control; refused before any charge when the plan has too few of them."
+            "description": "Features every bought unit must have. [\"p0f\"] buys only units with TCP fingerprint (p0f) control; refused before any charge when the plan has too few of them. IPv6 cannot be required through this tool yet."
           }
         },
         "required": [
@@ -3136,7 +3136,7 @@
     {
       "name": "coronium_replace_modem",
       "title": "Replace modem",
-      "description": "Replace an owned proxy with a different one chosen by the backend (the carrier can differ). The new proxy has a new host and new credentials, and the old one is released. Each replacement uses one of the account's daily replacements (2 per rolling 24 hours by default; the backend refuses when none are left). Some rental types cannot be replaced (HTTP 409). Requires explicit authorization; never use it as automatic recovery or because a rotation is pending.",
+      "description": "Replace an owned proxy with a different one chosen by the backend (the carrier can differ). The new proxy has a new host and new credentials, and the old one is released. Each replacement uses one of the account's daily replacements (2 per rolling 24 hours by default; the backend refuses when none are left). Some rental types cannot be replaced (HTTP 409). A p0f proxy (bought with p0f or with an OS set) or one bought with IPv6 required is replaced only by one that keeps it, otherwise the backend answers p0f_replacement_unavailable or ipv6_replacement_unavailable and nothing changes. Requires explicit authorization; never use it as automatic recovery or because a rotation is pending.",
       "inputSchema": {
         "type": "object",
         "properties": {

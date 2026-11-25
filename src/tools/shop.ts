@@ -16,7 +16,7 @@ const PRICE_CHANGED_HINT = "Nothing was charged. The server's total is above the
 
 const couponField = z.string().min(1).max(128).optional();
 const requireField = z.array(z.enum(["p0f"])).max(1).optional()
-    .describe("Features every bought unit must have. [\"p0f\"] buys only units with TCP fingerprint (p0f) control; refused before any charge when the plan has too few of them.");
+    .describe("Features every bought unit must have. [\"p0f\"] buys only units with TCP fingerprint (p0f) control; refused before any charge when the plan has too few of them. IPv6 cannot be required through this tool yet.");
 const wantP0fField = z.boolean().optional().describe("Deprecated alias: want_p0f:true is the same as require:[\"p0f\"]. Use require.");
 const fundingSource = z.enum(["account_credit", "btc"]).describe("Required. account_credit spends USD account credit; btc spends the native BTC balance at the live rate.");
 const renewalFields = {
@@ -215,7 +215,7 @@ function registerCatalogTools(server: McpServer): void {
         },
     });
     registerTool(server, "coronium_list_free_modems", {
-        description: "Read aggregate stock counts by country, carrier and region, optionally filtered by country and carrier. Counts are snapshots, not reservations or connectivity tests. Each row has count and p0f_count, and since API 3.3.16 openvpn_count, ipv6_count and one_time_only_count: how many of count can serve OpenVPN, were last observed on native IPv6, or are one-time rentals that are never sold with auto-renew (never more than count). A row may carry dataAllowanceNote {gbPerMonth, text, count, all}. The buy tools in this server do not pick a region, so promise OpenVPN or native IPv6 only when every row for that carrier has openvpn_count or ipv6_count equal to count. Re-read right before buying.",
+        description: "Read aggregate stock counts by country, carrier and region, optionally filtered by country and carrier. Counts are snapshots, not reservations or connectivity tests. Each row has count and p0f_count, and since API 3.3.16 openvpn_count, ipv6_count and one_time_only_count: how many of count can serve OpenVPN, had native IPv6 checked through their own proxy port in the last 2 hours, or are one-time rentals that are never sold with auto-renew (never more than count). Since API 3.3.18 rows also carry p0f_ipv6_count (both p0f and that IPv6 check). A row may carry dataAllowanceNote {gbPerMonth, text, count, all}. The buy tools in this server do not pick a region, so promise OpenVPN only when every row for that carrier has openvpn_count equal to count. They cannot require IPv6 yet, so never promise native IPv6 on a buy made here; the REST API buys it with require [\"ipv6\"]. Re-read right before buying.",
         input: {country_code: countrySchema.optional(), carrier_id: idSchema.optional()}, routes: ["GET /free-modems", "GET /countries"],
         run: async ({country_code, carrier_id}) => {
             const [stockResponse, countriesResponse] = await Promise.all([api.publicGet("/free-modems"), api.publicGet("/countries")]);
