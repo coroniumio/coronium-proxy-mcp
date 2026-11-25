@@ -254,8 +254,26 @@ Idempotency-Key: <new UUID>
  "require": ["ipv6"], "max_total_usd": 99}
 ```
 
-   `200` is the normal buy answer, `{result: "ok", charged_usd, currency, paymentId, data: [proxies], billing}`. It has no IPv6 field: a `200` to a request with `require: ["ipv6"]` is the confirmation.
-3. Handle `409 ipv6_unavailable`, sent before any charge:
+   REST answer `200` (account credit; example values). It has no IPv6 field: a `200` to a request with `require: ["ipv6"]` is the confirmation.
+
+```json
+{"result": "ok", "charged_usd": 99, "currency": "USD", "paymentId": "6a4e2c1f9b8d7e6f5a4b3c2d",
+ "data": [{"_id": "69e894e86f1f4736e92202d8", "name": "cor_US_5c75faff",
+           "proxy_login": "example_login", "proxy_password": "example_password",
+           "http_port": "8040", "socks_port": "5040", "ip_address": "203.0.113.7", "status": "active",
+           "rotation_interval": 0, "tariff_id": "651941cd5df31c2dd51f9e14",
+           "country_id": "64f0a1b2c3d4e5f60718293a", "carrier_id": "6515a3fa0a3b97dc8f2202d8",
+           "region_id": "68e1362859ceffb93de500e5", "tariff_expired_at": 1779404400000}],
+ "billing": {"schema_version": 1, "action": "purchase", "lane": "account_credit", "currency": "USD",
+             "line_items": [{"kind": "modem", "modem_id": null, "name": null,
+                             "tariff_id": "651941cd5df31c2dd51f9e14", "country_id": "64f0a1b2c3d4e5f60718293a",
+                             "carrier_id": "6515a3fa0a3b97dc8f2202d8", "plan": "month", "days": 30,
+                             "pricing_basis": "plan_fixed", "quantity": 1, "unit_price_usd": 99, "line_total_usd": 99}],
+             "subtotal_usd": 99, "discount": null, "charged_usd": 99,
+             "balance_before_usd": 500, "balance_after_usd": 401, "settlement": null}}
+```
+
+3. Handle `409 ipv6_unavailable`, sent before any charge. REST body for `require: ["ipv6"]`:
 
 ```json
 {"error": "No IPv6-capable proxies are available for this selection right now. Nothing was charged.",
@@ -263,9 +281,17 @@ Idempotency-Key: <new UUID>
  "retryable": false, "request_id": "req_3kq9v2LmT0s"}
 ```
 
-   With `["p0f", "ipv6"]` the code is the same and `error` reads "No IPv6-capable proxies with p0f are available for this selection right now. Nothing was charged." Pick another region or ask the person; do not loop.
+   REST body for `require: ["p0f", "ipv6"]` (the code is `ipv6_unavailable` here too, not `p0f_unavailable`):
 
-`replace_modem` on a line bought with `require: ["ipv6"]` gives a line with a fresh IPv6 check, or the error `ipv6_replacement_unavailable` with nothing changed. The API accepts `allow_without_ipv6: true` to take a line without IPv6; `replace_modem` does not send it yet.
+```json
+{"error": "No IPv6-capable proxies with p0f are available for this selection right now. Nothing was charged.",
+ "code": "ipv6_unavailable", "suggested_action": "pick_region_with_ipv6_count_or_retry_later",
+ "retryable": false, "request_id": "req_3kq9v2LmT0s"}
+```
+
+   Pick another region or ask the person; do not loop. The Stripe Link (MPP) and shared payment token checkouts answer `409 ipv6_unavailable` to `require: ["ipv6"]` before any quote or charge.
+
+`replace_modem` on a line bought with `require: ["ipv6"]` gives a line with a fresh IPv6 check, or the error `ipv6_replacement_unavailable` with nothing changed (the tool wraps it in its own error shape). The API accepts `allow_without_ipv6: true` to take a line without IPv6; `replace_modem` does not send it yet. REST body:
 
 ```json
 {"error": "No replacement with IPv6 is available right now. Your current proxy is unchanged. Try again later, or repeat the request with allow_without_ipv6: true to accept a replacement without IPv6.",
